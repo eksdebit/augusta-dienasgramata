@@ -1,4 +1,4 @@
-# Augusta dienasgrāmata
+# Cukuriņa pieraksti
 
 Diabēta dienasgrāmata telefonam (PWA): insulīns, ēdienreizes ar MV, glikoze, Dexcom Clarity imports, izdrukas, ģimenes piekļuve.
 

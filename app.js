@@ -121,7 +121,7 @@ function myDefaultName(){
 }
 
 async function loadMemberships(){
-  const { data, error } = await sb.from("members").select("child_id, role, display_name, children(name, g_per_mv)").eq("user_id", user.id);
+  const { data, error } = await sb.from("members").select("child_id, role, display_name, children(name, g_per_mv, ai_enabled)").eq("user_id", user.id);
   memberships = error ? [] : (data || []);
 }
 
@@ -147,7 +147,9 @@ $("#obSignOut").onclick = () => sb.auth.signOut();
 /* ---------- child selection ---------- */
 async function selectChild(id){
   const m = memberships.find(x => x.child_id === id);
-  child = { id, name: m.children.name }; role = m.role; gPerMv = num(m.children.g_per_mv) || 12;
+  child = { id, name: m.children.name, ai: !!m.children.ai_enabled };
+  $("#cam").hidden = !child.ai;
+  $("#hint").textContent = child.ai ? "Runā vai raksti brīvā formā. Diktēšanai spied mikrofonu uz telefona tastatūras." : "Ieraksti brīvā formā un pēc tam pieskaries ierakstam, lai norādītu veidu un vērtības."; role = m.role; gPerMv = num(m.children.g_per_mv) || 12;
   try { localStorage.setItem("child", id); } catch (_) {}
   $("#childName").textContent = child.name;
   $("#roleLabel").textContent = (m.display_name ? m.display_name + " · " : "") + ROLE[role];
@@ -373,6 +375,11 @@ $("#send").onclick = async () => {
   stopMic();
   const btn = $("#send"); btn.disabled = true; btn.textContent = "Atpazīst…";
   let list;
+  if (!child.ai) {
+    btn.disabled = false; btn.textContent = "Pievienot";
+    pending = { list: [{ kind: "note", time: cur === todayStr() ? nowTime() : "", note: t, bg: null }], clearInput: true }; openPreview();
+    return;
+  }
   try {
     const r = await callParse({ mode: "text", text: t });
     list = (r.entries || []).map(clean).filter(Boolean);
@@ -617,7 +624,7 @@ function printHTML(from, to, byDay, cgm){
       <div class="sum">Kopējā deva: <b>${fmt(t.tdd)} v</b>${t.mv>0&&t.bol>0 ? ` · īsais uz 1 MV: <b>${fmt(t.bol/t.mv,2)} v</b>` : ""}</div>` : ""}</section>`;
   }).join("");
   const box = (v,l) => `<div><b>${v || "—"}</b><span>${l}</span></div>`;
-  return `<div class="pr"><h1>${esc(child.name)} — diabēta dienasgrāmata</h1><div class="sub">${from === to ? esc(prettyDate(from)) : esc(prettyDate(from)) + " – " + esc(prettyDate(to))}</div>
+  return `<div class="pr"><h1>${esc(child.name)} · Cukuriņa pieraksti</h1><div class="sub">${from === to ? esc(prettyDate(from)) : esc(prettyDate(from)) + " – " + esc(prettyDate(to))}</div>
     ${from === to ? "" : `<div class="pstats">${box(S.tdd!=null?fmt(S.tdd,1)+" v":"", "Vid. kopējā deva dienā")}${box(S.bas!=null?fmt(S.bas,1)+" v":"", "Vid. ilgais")}${box(S.bol!=null?fmt(S.bol,1)+" v":"", "Vid. īsais")}${box(fmt(S.mv,1), "Vid. MV dienā")}${box(S.perMv!=null?fmt(S.perMv,2)+" v":"", "Īsais uz 1 MV")}${box(S.isf!=null?fmt(S.isf,1):"", "Jutība mmol/l uz 1 v")}${box(S.cgm?fmt(S.cgm.tir,0)+"%":"", "Dexcom diapazonā 3,9–10")}${box(S.cgm?fmt(S.cgm.avg,1):(S.gAvg!=null?fmt(S.gAvg,1):""), S.cgm ? "Dexcom vid. mmol/l" : "Vid. cukurs no pirksta")}</div>`}
     <div class="pdisc">Aprēķini ir aptuveni un domāti sarunai ar endokrinologu. 1 MV = ${fmt(gPerMv)} g ogļhidrātu. “≈” — MV aprēķinātas no ēdienu sastāva.</div>
     ${dayHTML || "<p>Šajā periodā nav ierakstu.</p>"}</div>`;

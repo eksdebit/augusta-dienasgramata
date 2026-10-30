@@ -1,7 +1,7 @@
 {
-  "name": "Augusta dienasgrāmata",
-  "short_name": "Augusts",
-  "description": "Diabēta dienasgrāmata — insulīns, ēdienreizes, MV un glikoze.",
+  "name": "Cukuriņa pieraksti",
+  "short_name": "Cukuriņš",
+  "description": "Diabēta dienasgrāmata bērnam — insulīns, ēdienreizes, MV un glikoze.",
   "lang": "lv",
   "start_url": "./",
   "scope": "./",

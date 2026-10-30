@@ -71,11 +71,11 @@ Deno.serve(async (req) => {
   const auth = req.headers.get("Authorization") || "";
   const url = Deno.env.get("SUPABASE_URL")!;
   const anon = Deno.env.get("SUPABASE_ANON_KEY")!;
-  // Only members of at least one diary may use the API key
-  const m = await fetch(`${url}/rest/v1/members?select=child_id&limit=1`, { headers: { Authorization: auth, apikey: anon } });
+  // Only members of a diary where the app owner has switched recognition on may use the API key
+  const m = await fetch(`${url}/rest/v1/members?select=child_id,children!inner(ai_enabled)&children.ai_enabled=is.true&limit=1`, { headers: { Authorization: auth, apikey: anon } });
   if (!m.ok) return json({ error: "Nav piekļuves" }, 401);
   const rows = await m.json();
-  if (!Array.isArray(rows) || !rows.length) return json({ error: "Nav piekļuves dienasgrāmatai" }, 403);
+  if (!Array.isArray(rows) || !rows.length) return json({ error: "Atpazīšana šai dienasgrāmatai nav ieslēgta" }, 403);
 
   const key = (Deno.env.get("ANTHROPIC_API_KEY") || "").replace(/\s+/g, "");
   if (!key) return json({ error: "Atpazīšana vēl nav iestatīta (trūkst API atslēgas)" }, 503);
