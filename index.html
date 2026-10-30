@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="lv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Augusta dienasgrāmata</title>
+<meta name="description" content="Augusta diabēta dienasgrāmata — insulīns, ēdienreizes, MV un glikoze.">
+<meta name="theme-color" content="#fdf6ea" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1c1712" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Augusts">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Nunito:wght@700;800;900&display=swap">
+<link rel="stylesheet" href="app.css?v=1">
+</head>
+<body>
+<div id="app">
+
+  <!-- ===== sign in ===== -->
+  <section id="scrAuth" class="screen center" hidden>
+    <div class="authbox">
+      <img src="icons/icon-192.png" alt="" class="authlogo" width="96" height="96">
+      <h1 class="brand">Augusta dienasgrāmata</h1>
+      <p class="muted" id="authInviteNote" hidden>Tev ir ielūgums uz dienasgrāmatu. Pieslēdzies vai izveido kontu, un tas tiks pieņemts.</p>
+      <div class="seg" role="tablist">
+        <button type="button" id="tabIn" class="segb" aria-selected="true">Pieslēgties</button>
+        <button type="button" id="tabUp" class="segb" aria-selected="false">Izveidot kontu</button>
+      </div>
+      <form id="authForm" class="form" novalidate>
+        <label id="lblName" hidden>Tavs vārds (kā rādīt ierakstos)<input id="aName" autocomplete="name" placeholder="Mamma"></label>
+        <label>E-pasts<input id="aEmail" type="email" autocomplete="email" inputmode="email" required></label>
+        <label>Parole<input id="aPass" type="password" autocomplete="current-password" minlength="8" required></label>
+        <button class="btn primary" id="aSubmit" type="submit">Pieslēgties</button>
+        <div class="formmsg" id="aMsg" role="status"></div>
+      </form>
+    </div>
+  </section>
+
+  <!-- ===== first run ===== -->
+  <section id="scrOnboard" class="screen center" hidden>
+    <div class="authbox">
+      <img src="icons/icon-192.png" alt="" class="authlogo" width="96" height="96">
+      <h1 class="brand">Sāksim dienasgrāmatu</h1>
+      <form id="obForm" class="form">
+        <label>Bērna vārds<input id="obChild" value="Augusts" required></label>
+        <label>Tavs vārds ierakstos<input id="obMe" placeholder="Mamma" required></label>
+        <button class="btn primary" type="submit">Izveidot dienasgrāmatu</button>
+      </form>
+      <div class="or"><span>vai</span></div>
+      <form id="obInvForm" class="form">
+        <label>Ielūguma saite, ko kāds tev atsūtīja<input id="obInv" placeholder="https://…?invite=…"></label>
+        <button class="btn" type="submit">Pievienoties</button>
+        <div class="formmsg" id="obMsg" role="status"></div>
+      </form>
+      <button class="link" type="button" id="obSignOut">Iziet</button>
+    </div>
+  </section>
+
+  <!-- ===== main app ===== -->
+  <section id="scrMain" class="screen" hidden>
+    <header class="topbar">
+      <img src="icons/icon-192.png" alt="" width="36" height="36" class="toplogo">
+      <div class="toptitle"><b id="childName">Augusts</b><span id="roleLabel"></span></div>
+      <select id="childSel" aria-label="Dienasgrāmata" hidden></select>
+    </header>
+
+    <main class="wrap">
+      <!-- DAY -->
+      <div id="viewDay" class="view">
+        <div class="datebar">
+          <button class="navbtn" id="prev" type="button" aria-label="Iepriekšējā diena">‹</button>
+          <button class="d" id="dateBtn" type="button"><span class="wd" id="wd"></span><span class="day" id="dayLabel"></span></button>
+          <input type="date" id="datePick" class="vh" tabindex="-1" aria-hidden="true">
+          <button class="navbtn" id="next" type="button" aria-label="Nākamā diena">›</button>
+        </div>
+        <div class="totals">
+          <div class="tot basal"><b id="tBasal">0</b><span>Ilgais v</span></div>
+          <div class="tot bolus"><b id="tBolus">0</b><span>Īsais v</span></div>
+          <div class="tot meal"><b id="tMv">0</b><span>MV</span></div>
+          <div class="tot gluc"><b id="tTab">0</b><span>Glik. tab.</span></div>
+        </div>
+        <div class="cgm" id="cgmCard" hidden></div>
+        <div class="log" id="log"><div class="empty"><strong>Ielādē…</strong></div></div>
+        <div class="rowbtns"><button class="btn small" id="copyDay" type="button">Kopēt dienu kā tekstu</button><button class="btn small" id="printDay" type="button">Drukāt dienu</button></div>
+      </div>
+
+      <!-- OVERVIEW -->
+      <div id="viewStats" class="view" hidden>
+        <div class="card">
+          <h2>Periods</h2>
+          <div class="chips" id="presets">
+            <button class="pchip" data-p="7" type="button">7 dienas</button>
+            <button class="pchip" data-p="14" type="button">14 dienas</button>
+            <button class="pchip" data-p="30" type="button">30 dienas</button>
+            <button class="pchip" data-p="month" type="button">Šis mēnesis</button>
+          </div>
+          <div class="range">
+            <label>No<input type="date" id="rFrom"></label>
+            <label>Līdz<input type="date" id="rTo"></label>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Vidējās devas</h2>
+          <div class="stats" id="statGrid"></div>
+          <p class="disc">Jutība un koeficienti ir aptuveni aprēķini pēc vispārīgām formulām (100 un 500 likums) un faktiskajām devām. Tie noder sarunai ar endokrinologu, bet devas maini tikai pēc saskaņošanas ar ārstu.</p>
+        </div>
+        <div class="card">
+          <h2>Pa dienām</h2>
+          <div class="tblwrap"><table id="dayTable"></table></div>
+        </div>
+        <div class="card">
+          <h2>Drukāt un eksportēt</h2>
+          <div class="rowbtns"><button class="btn primary" id="printPeriod" type="button">Drukāt periodu</button><button class="btn" id="dlCsv" type="button">Excel (CSV)</button></div>
+          <p class="hint">Katra diena drukājas atsevišķā A4 blokā ar sensora līkni. Drukas logā var izvēlēties arī “Saglabāt kā PDF”.</p>
+        </div>
+        <div class="card" id="cgmImportCard">
+          <h2>Dexcom sensora dati</h2>
+          <p class="hint" id="cgmImpStatus">Sensora līkne parādās katras dienas lapā un pārskatā, kad dati ir importēti.</p>
+          <ol class="steps">
+            <li>Atver <b>clarity.dexcom.eu</b> un pieslēdzies ar Dexcom kontu.</li>
+            <li>Jebkurā atskaitē spied eksporta ikonu, izvēlies periodu un saglabā CSV failu.</li>
+            <li>Spied pogu zemāk un izvēlies šo failu.</li>
+          </ol>
+          <input type="file" id="cgmFile" accept=".csv,text/csv,text/plain" hidden>
+          <button class="btn primary" id="cgmImport" type="button">Importēt Dexcom Clarity CSV</button>
+        </div>
+      </div>
+
+      <!-- FAMILY -->
+      <div id="viewFamily" class="view" hidden>
+        <div class="card">
+          <h2>Kam ir piekļuve</h2>
+          <ul class="people" id="memberList"></ul>
+        </div>
+        <div class="card" id="inviteCard" hidden>
+          <h2>Uzaicināt</h2>
+          <form id="invForm" class="form">
+            <label>Vārds<input id="invName" placeholder="Tētis, vecmamma, skolotāja…" required></label>
+            <label>Tiesības
+              <select id="invRole">
+                <option value="family">Ģimene — ievada un labo visus ierakstus</option>
+                <option value="caregiver">Aprūpētājs — redz visu, labo tikai savus ierakstus</option>
+              </select>
+            </label>
+            <button class="btn primary" type="submit">Izveidot ielūguma saiti</button>
+          </form>
+          <div id="invResult"></div>
+          <ul class="people" id="inviteList"></ul>
+        </div>
+        <div class="card">
+          <h2>Iestatījumi</h2>
+          <div class="form">
+            <label>Mans vārds ierakstos<input id="myName"></label>
+            <label id="gmvLbl">1 MV = g ogļhidrātu<input id="gPerMv" inputmode="decimal"></label>
+          </div>
+          <div class="rowbtns"><button class="btn" id="saveSettings" type="button">Saglabāt</button><button class="btn" id="signOut" type="button">Iziet no konta</button></div>
+        </div>
+        <p class="hint center-t">Lai lietotne būtu telefona sākuma ekrānā: iPhone Safari → Kopīgot → “Pievienot sākuma ekrānam”; Android Chrome → ⋮ → “Instalēt lietotni”.</p>
+      </div>
+    </main>
+
+    <div class="dock" id="dock">
+      <div class="dock-in">
+        <div class="inrow">
+          <button class="iconbtn cam" id="cam" type="button" aria-label="Fotografēt glikometru vai ēdienkarti">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+          </button>
+          <input type="file" id="camFile" accept="image/*" capture="environment" hidden>
+          <textarea id="input" rows="2" placeholder="Piem.: 7:20 cukurs 6,8, Lantus 3 vienības. Brokastīs manna ar ķirbi 150 grami"></textarea>
+          <button class="iconbtn mic" id="mic" type="button" aria-label="Diktēt" hidden>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+          </button>
+          <button class="btn primary send" id="send" type="button">Pievienot</button>
+        </div>
+        <div class="hint" id="hint">Runā vai raksti brīvā formā. Diktēšanai spied mikrofonu uz telefona tastatūras.</div>
+      </div>
+    </div>
+
+    <nav class="tabbar" aria-label="Sadaļas">
+      <button type="button" data-v="day" aria-current="page"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Diena</button>
+      <button type="button" data-v="stats"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 19h16M7 16V10M12 16V5M17 16v-4"/></svg>Pārskats</button>
+      <button type="button" data-v="family"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><circle cx="17" cy="9.5" r="2.4"/><path d="M3 19c.8-3.4 3.2-5 6-5s5.2 1.6 6 5M15 14.6c2.6-.3 4.6 1 5.4 3.9"/></svg>Ģimene</button>
+    </nav>
+  </section>
+</div>
+
+<div id="sheetHost"></div>
+<div id="printArea" aria-hidden="true"></div>
+
+<script src="vendor/supabase-2.45.4.js"></script>
+<script src="config.js?v=1"></script>
+<script src="app.js?v=1"></script>
+</body>
+</html>
