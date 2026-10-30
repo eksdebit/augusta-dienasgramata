@@ -148,7 +148,7 @@ $("#obSignOut").onclick = () => sb.auth.signOut();
 async function selectChild(id){
   const m = memberships.find(x => x.child_id === id);
   child = { id, name: m.children.name, ai: !!m.children.ai_enabled };
-  $("#cam").hidden = !child.ai;
+  $("#photoRow").hidden = !child.ai;
   $("#hint").textContent = child.ai ? "Runā vai raksti brīvā formā. Diktēšanai spied mikrofonu uz telefona tastatūras." : "Ieraksti brīvā formā un pēc tam pieskaries ierakstam, lai norādītu veidu un vērtības."; role = m.role; gPerMv = num(m.children.g_per_mv) || 12;
   try { localStorage.setItem("child", id); } catch (_) {}
   $("#childName").textContent = child.name;
@@ -391,18 +391,12 @@ $("#send").onclick = async () => {
 };
 
 let camMode = "menu";
-$("#cam").onclick = () => {
-  $("#sheetHost").innerHTML = `<div class="sheet-bg"><div class="sheet" role="dialog" aria-label="Ko fotografēsi?"><h2>Ko fotografēsi?</h2>
-    <div class="choice"><button class="btn" type="button" id="chMeter">Glikometra rādījumu</button><button class="btn" type="button" id="chMenu">Ēdienkarti vai ēdienu</button></div>
-    <div class="rowbtns"><button class="btn" id="chCancel" type="button">Atcelt</button></div></div></div>`;
-  $("#chMeter").onclick = () => { camMode = "meter"; closeSheet(); $("#camFile").click(); };
-  $("#chMenu").onclick = () => { camMode = "menu"; closeSheet(); $("#camFile").click(); };
-  $("#chCancel").onclick = closeSheet;
-};
-function shrink(file){
+document.querySelectorAll(".photobtn").forEach(b => b.onclick = () => { camMode = b.dataset.mode; $("#camFile").click(); });
+function shrink(file, max){
+  max = max || 1600;
   return new Promise(res => {
     const url = URL.createObjectURL(file); const img = new Image();
-    img.onload = () => { const max = 1600; let w = img.width, h = img.height; const s = Math.min(1, max/Math.max(w,h)); w = Math.round(w*s); h = Math.round(h*s);
+    img.onload = () => { let w = img.width, h = img.height; const s = Math.min(1, max/Math.max(w,h)); w = Math.round(w*s); h = Math.round(h*s);
       const c = document.createElement("canvas"); c.width = w; c.height = h; c.getContext("2d").drawImage(img,0,0,w,h); URL.revokeObjectURL(url);
       res(c.toDataURL("image/jpeg", 0.85).split(",")[1]); };
     img.onerror = () => { URL.revokeObjectURL(url); res(null); }; img.src = url;
@@ -410,15 +404,24 @@ function shrink(file){
 }
 $("#camFile").onchange = async ev => {
   const f = ev.target.files && ev.target.files[0]; ev.target.value = ""; if (!f) return;
-  const btn = $("#send"); btn.disabled = true; btn.textContent = camMode === "meter" ? "Lasa rādījumu…" : "Lasa ēdienkarti…";
+  const btns = document.querySelectorAll(".photobtn"); btns.forEach(x => x.disabled = true);
+  const btn = $("#send"); btn.disabled = true;
+  btn.textContent = camMode === "meter" ? "Lasa rādījumu…" : camMode === "notes" ? "Lasa pierakstus…" : "Lasa ēdienkarti…";
   try {
-    const image = await shrink(f); if (!image) throw new Error("Attēlu neizdevās atvērt");
+    const image = await shrink(f, camMode === "notes" ? 2200 : 1600); if (!image) throw new Error("Attēlu neizdevās atvērt");
     if (camMode === "meter") {
       const r = await callParse({ mode: "meter", image, mediaType: "image/jpeg" });
       let v = num(r.glucose); if (v == null) throw new Error(r.error || "Rādījumu neizdevās nolasīt");
       if ((r.unit && /mg/i.test(r.unit)) || v > 35) v = Math.round(v/18.016*10)/10;
       const time = (r.time && /^\d{1,2}:\d{2}$/.test(r.time) && (!r.date || r.date === cur)) ? r.time.padStart(5,"0") : (cur === todayStr() ? nowTime() : "");
       pending = { list: [{ kind: "glucose", time, glucose: v, bg: null, note: "glikometrs (foto)", src: "meter" }], clearInput: false };
+    } else if (camMode === "notes") {
+      const r = await callParse({ mode: "notes", image, mediaType: "image/jpeg", text: $("#input").value.trim() });
+      const list = (r.entries || []).map(clean).filter(Boolean);
+      if (!list.length) throw new Error(r.error || "Pierakstus neizdevās nolasīt");
+      list.forEach(e => e.src = "notes");
+      const d = /^\d{4}-\d{2}-\d{2}$/.test(r.date || "") ? r.date : null;
+      pending = { list, clearInput: true, date: d && d !== cur ? d : null };
     } else {
       const r = await callParse({ mode: "menu", image, mediaType: "image/jpeg", text: $("#input").value.trim() });
       const list = (r.entries || []).map(clean).filter(Boolean);
@@ -428,7 +431,7 @@ $("#camFile").onchange = async ev => {
     }
     openPreview();
   } catch (e) { toast(e.message || "Neizdevās"); }
-  finally { btn.disabled = false; btn.textContent = "Pievienot"; }
+  finally { btns.forEach(x => x.disabled = false); btn.disabled = false; btn.textContent = "Pievienot"; }
 };
 
 /* ---------- preview & edit ---------- */
@@ -439,7 +442,8 @@ function openPreview(){
     <h2>Pārbaudi pirms saglabāšanas</h2>
     <div class="prev" id="prevList"></div>
     ${pending.list.some(e => e.mv_est) ? `<p class="disc">MV ar “≈” ir aprēķinātas (1 MV = ${fmt(gPerMv)} g OH). Kopā ≈ ${fmt(tot,1)} MV. Pārbaudi gramus un ogļhidrātus, pieskaroties ierakstam.</p>` : ""}
-    <p class="hint">Tiks saglabāts dienā ${esc(prettyDate(cur))}.</p>
+    ${pending.date ? `<label class="full">Pierakstu diena (nolasīta no lapas)<input type="date" id="pvDate" value="${pending.date}"></label>` : `<p class="hint">Tiks saglabāts dienā ${esc(prettyDate(cur))}.</p>`}
+    ${pending.list.some(e => e.src === "notes") ? `<p class="disc">Rokraksts nolasīts automātiski. Pārbaudi katru skaitli, īpaši devas, pirms saglabā.</p>` : ""}
     <div class="rowbtns"><button class="btn" id="pvCancel" type="button">Atcelt</button><button class="btn primary" id="pvSave" type="button">Saglabāt (${pending.list.length})</button></div>
   </div></div>`;
   const pl = $("#prevList");
@@ -454,10 +458,12 @@ function toRow(e){
 }
 async function savePending(){
   const btn = $("#pvSave"); btn.disabled = true; btn.textContent = "Saglabā…";
-  const { error } = await sb.from("entries").insert(pending.list.map(toRow));
+  const day = pending.date && $("#pvDate") && $("#pvDate").value ? $("#pvDate").value : cur;
+  const { error } = await sb.from("entries").insert(pending.list.map(e => Object.assign(toRow(e), { date: day })));
   if (error) { btn.disabled = false; btn.textContent = "Mēģināt vēlreiz"; toast("Neizdevās saglabāt: " + error.message); return; }
   if (pending.clearInput) $("#input").value = "";
-  pending = null; closeSheet(); toast("Saglabāts"); loadDay(true);
+  pending = null; closeSheet(); toast("Saglabāts");
+  if (day !== cur) { cur = day; loadDay(); } else loadDay(true);
 }
 function openEdit(e, pendingIdx){
   const isPending = pendingIdx !== undefined;

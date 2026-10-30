@@ -57,6 +57,29 @@ Formāts: {"entries":[{"time":"HH:MM","kind":"meal","meal":"Pusdienas","items":[
 Atbildi TIKAI ar JSON.`;
 }
 
+function notesPrompt(b: Record<string, string>) {
+  return `Attēlā ir ar roku rakstīta lapa no papīra dienasgrāmatas bērnam ar 1. tipa diabētu (latviešu valodā). Pārraksti to strukturētos ierakstos.
+Šodien: ${b.today}. Lietotnē izvēlētā diena: ${b.cur}.
+${b.text ? `Mammas komentārs: "${b.text.slice(0, 1000)}"\n` : ""}
+${RULES}
+
+Kā parasti raksta šajā dienasgrāmatā:
+- Lapas augšā bieži ir datums (piem. "26 Oktobris"); ja datums redzams, atgriez to laukā "date" formātā YYYY-MM-DD (gads: ${b.today.slice(0, 4)}, ja nav rakstīts). Ja datuma nav, "date": null.
+- "7:20 -> Lantus 3v" = basal 3 vienības plkst. 7:20. "Apidra 0.5v" = bolus. "v" = vienības.
+- "B." = Brokastis, "P." = Pusdienas, "L." = Launags, "V." = Vakariņas (ja "V." stāv ēdienreižu sarakstā). Zem tām ir ēdieni ar gramiem ("150g").
+- Malā pie ēdienreizes bieži ir "2MV", "3,5MV" — tās ir šīs ēdienreizes maizes vienības (mv).
+- Malā aplī ievilkts skaitlis ar vai bez "v" (piem. "(1v)", "(1)") — ar ēdienreizi saistītā insulīna deva; ja pie tās nav atsevišķa laika, ieliec ēdienreizes piezīmē "deva N v"; neveido bolus ierakstu, ja tā pati deva jau ir pierakstīta ar laiku.
+- "1 glikozes tablete" = tablets; "1 cepums" = Uzkoda ar cepumu.
+- Piezīmes kā "skatāmies cukuru", "1 vai 1,5" ieliec note.
+- Ēdienreizes laiku, ja nav rakstīts, ņem no blakus esošās laika skalas lapas malā un piezīmē raksti "laiks aptuvens".
+- Pārsvītrots teksts neskaitās. Lapas augšā esošie citi uzdevumi (piem. iepirkumi), kas nav par bērna veselību, NEVEIDO ierakstus.
+- Ja kādu vārdu vai skaitli nevar droši salasīt, raksti savu labāko minējumu un pievieno piezīmē "nesalasāms: …". Nekad nesacer skaitļus.
+- Ēdieniem oh atstāj null, ja nav rakstīts; mv tikai tad, ja rakstīts.
+
+Atbildi TIKAI ar JSON: {"date":"YYYY-MM-DD vai null","entries":[{"time":"HH:MM","kind":"...", ...}],"error":null}
+Ja attēlā nav dienasgrāmatas pierakstu, atgriez tukšu sarakstu un "error" ar īsu paskaidrojumu latviski.`;
+}
+
 function meterPrompt() {
   return `Attēlā ir glikometra ekrāns ar asins glikozes mērījumu no pirksta (bērna 1. tipa diabēta dienasgrāmatai).
 Nolasi galveno skaitli uz ekrāna. Ja ekrānā redzams laiks vai datums, nolasi arī tos.
@@ -84,21 +107,21 @@ Deno.serve(async (req) => {
   try { b = await req.json(); } catch { return json({ error: "Slikts pieprasījums" }, 400); }
   const mode = b.mode || "text";
   const content: unknown[] = [];
-  if (mode === "menu" || mode === "meter") {
+  if (mode === "menu" || mode === "meter" || mode === "notes") {
     if (!b.image || b.image.length > 7_000_000) return json({ error: "Attēls nav pievienots vai ir par lielu" }, 400);
     content.push({ type: "image", source: { type: "base64", media_type: b.mediaType || "image/jpeg", data: b.image } });
   }
-  content.push({ type: "text", text: mode === "menu" ? menuPrompt(b) : mode === "meter" ? meterPrompt() : textPrompt(b) });
+  content.push({ type: "text", text: mode === "menu" ? menuPrompt(b) : mode === "notes" ? notesPrompt(b) : mode === "meter" ? meterPrompt() : textPrompt(b) });
 
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-    body: JSON.stringify({ model: MODEL, max_tokens: 2500, messages: [{ role: "user", content }] }),
+    body: JSON.stringify({ model: MODEL, max_tokens: mode === "notes" ? 4000 : 2500, messages: [{ role: "user", content }] }),
   });
   if (!r.ok) {
     const t = await r.text();
     console.error("anthropic", r.status, t.slice(0, 500));
-    return json({ error: r.status === 429 ? "Pārāk daudz pieprasījumu, pagaidi brīdi" : "Atpazīšana neizdevās" }, 502);
+    return json({ error: r.status === 429 ? "Pārāk daudz pieprasījumu, pagaidi brīdi" : r.status === 401 ? "API atslēga nav derīga" : r.status === 400 && /credit/i.test(t) ? "Anthropic kontā nav līdzekļu" : "Atpazīšana neizdevās" }, 502);
   }
   const data = await r.json();
   const text = (data.content || []).filter((c: { type: string }) => c.type === "text").map((c: { text: string }) => c.text).join("");
