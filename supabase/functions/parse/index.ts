@@ -77,7 +77,7 @@ Deno.serve(async (req) => {
   const rows = await m.json();
   if (!Array.isArray(rows) || !rows.length) return json({ error: "Nav piekļuves dienasgrāmatai" }, 403);
 
-  const key = Deno.env.get("ANTHROPIC_API_KEY");
+  const key = (Deno.env.get("ANTHROPIC_API_KEY") || "").replace(/\s+/g, "");
   if (!key) return json({ error: "Atpazīšana vēl nav iestatīta (trūkst API atslēgas)" }, 503);
 
   let b: Record<string, string>;
