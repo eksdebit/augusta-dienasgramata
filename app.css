@@ -166,7 +166,7 @@ td button{border:0;background:none;color:var(--blue);padding:0;font-weight:700;t
   padding:10px max(16px,env(safe-area-inset-right,0px)) 10px max(16px,env(safe-area-inset-left,0px));box-shadow:0 -6px 20px rgba(90,60,20,.07)}
 .dock-in{max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:6px}
 .inrow{display:flex;gap:8px;align-items:flex-end}
-.inrow textarea{flex:1;min-width:0;resize:none;min-height:50px;max-height:150px;background:var(--paper)}
+.inrow textarea{flex:1;min-width:0;resize:none;height:50px;min-height:50px;max-height:150px;padding:13px 12px;line-height:1.4;background:var(--paper);overflow-y:auto}
 .send{flex:none;min-height:50px}
 .photorow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
 .photobtn{display:flex;align-items:center;justify-content:center;gap:5px;min-height:42px;border-radius:12px;border:1px solid var(--rule);background:var(--paper);color:var(--ink);font-size:.8rem;font-weight:700;padding:4px 6px;line-height:1.15;text-align:center}

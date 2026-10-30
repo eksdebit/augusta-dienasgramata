@@ -748,6 +748,12 @@ $("#mic").onclick = () => {
   } catch (_) { $("#mic").hidden = true; }
 };
 
+/* ---------- input grows with text, starts at button height ---------- */
+function fitInput(){ const t = $("#input"); t.style.height = "50px"; if (t.scrollHeight > 52) t.style.height = Math.min(t.scrollHeight + 2, 150) + "px"; }
+$("#input").addEventListener("input", fitInput);
+const _desc = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value");
+Object.defineProperty($("#input"), "value", { get(){ return _desc.get.call(this); }, set(v){ _desc.set.call(this, v); fitInput(); } });
+
 /* ---------- service worker ---------- */
 if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
 
