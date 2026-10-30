@@ -149,7 +149,7 @@ async function selectChild(id){
   const m = memberships.find(x => x.child_id === id);
   child = { id, name: m.children.name, ai: !!m.children.ai_enabled };
   $("#photoRow").hidden = !child.ai;
-  $("#hint").textContent = child.ai ? "Runā vai raksti brīvā formā. Diktēšanai spied mikrofonu uz telefona tastatūras." : "Ieraksti brīvā formā un pēc tam pieskaries ierakstam, lai norādītu veidu un vērtības."; role = m.role; gPerMv = num(m.children.g_per_mv) || 12;
+  $("#hint").textContent = hintDefault(); $("#mic").hidden = !(child.ai && canRecord); role = m.role; gPerMv = num(m.children.g_per_mv) || 12;
   try { localStorage.setItem("child", id); } catch (_) {}
   $("#childName").textContent = child.name;
   $("#roleLabel").textContent = (m.display_name ? m.display_name + " · " : "") + ROLE[role];
@@ -731,22 +731,53 @@ function setView(v){
 }
 document.querySelectorAll(".tabbar button").forEach(b => b.onclick = () => setView(b.dataset.v));
 
-/* ---------- dictation in page (where the browser supports it) ---------- */
-let rec = null, recOn = false;
-const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-if (SR) $("#mic").hidden = false;
-function stopMic(){ if (rec && recOn) { try { rec.stop(); } catch (_) {} } }
-$("#mic").onclick = () => {
-  if (recOn) { stopMic(); return; }
+/* ---------- voice: record in the app, transcribe on the server ---------- */
+let recorder = null, chunks = [], recStream = null, recTimer = null, recStart = 0;
+const canRecord = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
+function pickMime(){
+  const c = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"];
+  for (const m of c) { try { if (MediaRecorder.isTypeSupported(m)) return m; } catch (_) {} }
+  return "";
+}
+function setMicUI(on){
+  $("#mic").classList.toggle("on", on);
+  $("#mic").setAttribute("aria-label", on ? "Beigt ierakstu" : "Diktēt");
+}
+function stopMic(){ if (recorder && recorder.state === "recording") recorder.stop(); }
+function hintDefault(){ return child && child.ai ? "Spied mikrofonu, runā un spied vēlreiz. Vai raksti brīvā formā." : "Ieraksti brīvā formā un pēc tam pieskaries ierakstam, lai norādītu veidu un vērtības."; }
+async function startMic(){
   try {
-    rec = new SR(); rec.lang = "lv-LV"; rec.continuous = true; rec.interimResults = true;
-    const base = $("#input").value ? $("#input").value.trim() + " " : "";
-    rec.onresult = ev => { let t = ""; for (let i = 0; i < ev.results.length; i++) t += ev.results[i][0].transcript; $("#input").value = base + t; };
-    rec.onerror = () => { recOn = false; $("#mic").classList.remove("on"); $("#mic").hidden = true; $("#hint").textContent = "Šeit diktēšana nav pieejama — izmanto mikrofonu uz telefona tastatūras."; };
-    rec.onend = () => { recOn = false; $("#mic").classList.remove("on"); };
-    rec.start(); recOn = true; $("#mic").classList.add("on");
-  } catch (_) { $("#mic").hidden = true; }
-};
+    recStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+  } catch (e) { toast("Mikrofons nav atļauts. Atļauj to telefona iestatījumos."); return; }
+  const mime = pickMime();
+  try { recorder = mime ? new MediaRecorder(recStream, { mimeType: mime }) : new MediaRecorder(recStream); }
+  catch (_) { recStream.getTracks().forEach(t => t.stop()); toast("Ierakstīšana šajā telefonā nav pieejama"); return; }
+  chunks = [];
+  recorder.ondataavailable = ev => { if (ev.data && ev.data.size) chunks.push(ev.data); };
+  recorder.onstop = async () => {
+    clearInterval(recTimer); setMicUI(false);
+    recStream.getTracks().forEach(t => t.stop());
+    const type = recorder.mimeType || mime || "audio/mp4";
+    const blob = new Blob(chunks, { type });
+    if (Date.now() - recStart < 700 || blob.size < 1500) { $("#hint").textContent = hintDefault(); return; }
+    $("#hint").textContent = "Pārvērš runu tekstā…"; $("#mic").disabled = true; $("#send").disabled = true;
+    try {
+      const audio = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1]); r.onerror = rej; r.readAsDataURL(blob); });
+      const { data, error } = await sb.functions.invoke("transcribe", { body: { audio, mime: type } });
+      if (error) throw new Error(await fnError(error));
+      const text = ((data && data.text) || "").trim();
+      if (!text) throw new Error("Neko nesadzirdēju, pamēģini vēlreiz");
+      const cur0 = $("#input").value.trim();
+      $("#input").value = cur0 ? cur0 + " " + text : text;
+      $("#hint").textContent = "Pārbaudi tekstu un spied “Pievienot”.";
+    } catch (e) { toast(e.message || "Neizdevās pārvērst runu"); $("#hint").textContent = hintDefault(); }
+    finally { $("#mic").disabled = false; $("#send").disabled = false; }
+  };
+  recorder.start(); recStart = Date.now(); setMicUI(true);
+  const tick = () => { const s = Math.floor((Date.now() - recStart) / 1000); $("#hint").textContent = `Klausos… ${Math.floor(s/60)}:${pad(s%60)} — spied mikrofonu, kad beidz`; if (s >= 120) stopMic(); };
+  tick(); recTimer = setInterval(tick, 500);
+}
+$("#mic").onclick = () => { if (recorder && recorder.state === "recording") stopMic(); else startMic(); };
 
 /* ---------- input grows with text, starts at button height ---------- */
 function fitInput(){ const t = $("#input"); t.style.height = "50px"; if (t.scrollHeight > 52) t.style.height = Math.min(t.scrollHeight + 2, 150) + "px"; }
