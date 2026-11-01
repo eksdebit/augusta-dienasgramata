@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Nunito:wght@700;800;900&display=swap">
-<link rel="stylesheet" href="app.css?v=5">
+<link rel="stylesheet" href="app.css?v=6">
 </head>
 <body>
 <div id="app">
@@ -85,6 +85,7 @@
           <div class="tot meal"><b id="tMv">0</b><span>MV</span></div>
           <div class="tot gluc"><b id="tTab">0</b><span>Glik. tab.</span></div>
         </div>
+        <div class="pens" id="penCard" hidden></div>
         <div class="cgm" id="cgmCard" hidden></div>
         <div class="log" id="log"><div class="empty"><strong>Ielādē…</strong></div></div>
         <div class="rowbtns"><button class="btn small" id="copyDay" type="button">Kopēt dienu kā tekstu</button><button class="btn small" id="printDay" type="button">Drukāt dienu</button></div>
@@ -94,11 +95,11 @@
       <div id="viewStats" class="view" hidden>
         <div class="card">
           <h2>Periods</h2>
-          <div class="chips" id="presets">
+          <div class="chips presets" id="presets">
             <button class="pchip" data-p="7" type="button">7 dienas</button>
             <button class="pchip" data-p="14" type="button">14 dienas</button>
             <button class="pchip" data-p="30" type="button">30 dienas</button>
-            <button class="pchip" data-p="month" type="button">Šis mēnesis</button>
+            <button class="pchip" data-p="month" type="button">Mēnesis</button>
           </div>
           <div class="range">
             <label>No<input type="date" id="rFrom"></label>
@@ -158,6 +159,7 @@
           <div class="form">
             <label>Mans vārds ierakstos<input id="myName"></label>
             <label id="gmvLbl">1 MV = g ogļhidrātu<input id="gPerMv" inputmode="decimal"></label>
+            <label>Insulīna ampulu lieto dienas (pēc instrukcijas)<input id="penDays" inputmode="numeric"></label>
           </div>
           <div class="rowbtns"><button class="btn" id="saveSettings" type="button">Saglabāt</button><button class="btn" id="signOut" type="button">Iziet no konta</button></div>
         </div>
@@ -176,11 +178,12 @@
         </div>
         <div class="photorow" id="photoRow">
           <input type="file" id="camFile" accept="image/*" hidden>
-          <button class="photobtn" type="button" data-mode="meter"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Glikozes rādījums</button>
-          <button class="photobtn" type="button" data-mode="menu"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Ēdienreize</button>
-          <button class="photobtn" type="button" data-mode="notes"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Pieraksti</button>
+          <button class="photobtn" type="button" data-mode="meter" aria-label="Glikozes rādījums no foto"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Glikoze</button>
+          <button class="photobtn" type="button" data-mode="ketones" aria-label="Ketonu rādījums no foto"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Ketoni</button>
+          <button class="photobtn" type="button" data-mode="menu" aria-label="Ēdienreize no foto"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Ēdienreize</button>
+          <button class="photobtn" type="button" data-mode="notes" aria-label="Pieraksti no foto"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Pieraksti</button>
         </div>
-        <div class="hint" id="hint">Runā vai raksti brīvā formā. Diktēšanai spied mikrofonu uz telefona tastatūras.</div>
+        <div class="hint" id="hint" hidden></div>
       </div>
     </div>
 
@@ -196,7 +199,7 @@
 <div id="printArea" aria-hidden="true"></div>
 
 <script src="vendor/supabase-2.45.4.js"></script>
-<script src="config.js?v=5"></script>
-<script src="app.js?v=5"></script>
+<script src="config.js?v=6"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>

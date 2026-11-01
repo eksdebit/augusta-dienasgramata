@@ -14,7 +14,9 @@ const RULES = `Ierakstu veidi (kind):
 - "bolus": īsās darbības insulīns (Apidra, NovoRapid, Humalog, Fiasp). Lauki: insulin, units.
 - "meal": ēdienreize vai uzkoda. Lauki: meal ("Brokastis","Pusdienas","Launags","Vakariņas","Uzkoda"), items [{n: nosaukums, g: grami vai null, oh: aptuvenie ogļhidrāti gramos šai porcijai vai null}], mv (maizes vienības TIKAI ja tās skaidri pateiktas, citādi null).
 - "glucose": cukura mērījums mmol/l, kas ir viens pats. Lauks: glucose.
+- "ketones": ketonu mērījums asinīs mmol/l (piem. "ketoni 0,4"). Lauks: ketones.
 - "tablets": glikozes tabletes. Lauks: count.
+- "pen": atvērta jauna insulīna ampula / pildspalva ("insulīna maiņa", "jauna Apidra ampula"). Lauks: insulin (nosaukums, ja pateikts, citādi "").
 - "note": viss pārējais. Lauks: note.
 Jebkuram ierakstam var būt note (īsa piezīme) un bg (glikozes līmenis mmol/l tajā brīdī, ja pateikts).`;
 
@@ -87,6 +89,13 @@ Atbildi TIKAI ar JSON: {"glucose": skaitlis vai null, "unit": "mmol/L" vai "mg/d
 Ja ekrānā ir LO vai HI, atgriez glucose null un error ar paskaidrojumu. Ja tas nav glikometra ekrāns, atgriez error.`;
 }
 
+function ketonePrompt() {
+  return `Attēlā ir ketonu mērītāja (vai glikometra ar ketonu režīmu, piem. FreeStyle Optium) ekrāns ar β-ketonu mērījumu asinīs (bērna 1. tipa diabēta dienasgrāmatai).
+Nolasi galveno skaitli mmol/L. Ja ekrānā redzams laiks vai datums, nolasi arī tos.
+Atbildi TIKAI ar JSON: {"ketones": skaitlis vai null, "time": "HH:MM" vai null, "date": "YYYY-MM-DD" vai null, "error": null vai īss paskaidrojums latviski}.
+Ja ekrānā ir LO, HI vai tas izskatās pēc glikozes mērījuma, nevis ketoniem, atgriez ketones null un error ar paskaidrojumu.`;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -107,11 +116,11 @@ Deno.serve(async (req) => {
   try { b = await req.json(); } catch { return json({ error: "Slikts pieprasījums" }, 400); }
   const mode = b.mode || "text";
   const content: unknown[] = [];
-  if (mode === "menu" || mode === "meter" || mode === "notes") {
+  if (mode === "menu" || mode === "meter" || mode === "ketones" || mode === "notes") {
     if (!b.image || b.image.length > 7_000_000) return json({ error: "Attēls nav pievienots vai ir par lielu" }, 400);
     content.push({ type: "image", source: { type: "base64", media_type: b.mediaType || "image/jpeg", data: b.image } });
   }
-  content.push({ type: "text", text: mode === "menu" ? menuPrompt(b) : mode === "notes" ? notesPrompt(b) : mode === "meter" ? meterPrompt() : textPrompt(b) });
+  content.push({ type: "text", text: mode === "menu" ? menuPrompt(b) : mode === "notes" ? notesPrompt(b) : mode === "meter" ? meterPrompt() : mode === "ketones" ? ketonePrompt() : textPrompt(b) });
 
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
