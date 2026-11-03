@@ -16,9 +16,12 @@ const RULES = `Ierakstu veidi (kind):
 - "glucose": cukura mērījums mmol/l, kas ir viens pats. Lauks: glucose.
 - "ketones": ketonu mērījums asinīs mmol/l (piem. "ketoni 0,4"). Lauks: ketones.
 - "tablets": glikozes tabletes. Lauks: count.
+- "temp": ķermeņa temperatūra °C (piem. "temperatūra 38,5"). Lauks: temp.
+- "med": iedotas zāles, kas nav insulīns (piem. "Nurofen 5 ml", "Zirtec sīrups 2,5 ml"). Lauks: med (nosaukums un deva kā teikts).
 - "pen": atvērta jauna insulīna ampula / pildspalva ("insulīna maiņa", "jauna Apidra ampula"). Lauks: insulin (nosaukums, ja pateikts, citādi "").
 - "note": viss pārējais. Lauks: note.
-Jebkuram ierakstam var būt note (īsa piezīme) un bg (glikozes līmenis mmol/l tajā brīdī, ja pateikts).`;
+Jebkuram ierakstam var būt note (īsa piezīme), bg (glikozes līmenis mmol/l tajā brīdī, ja pateikts) un ketones (ketoni mmol/l tajā brīdī, ja pateikti kopā ar citu ierakstu).
+Ja ketoni pateikti kopā ar cukuru vai insulīnu (piem. "cukurs 16,4, ketoni 2,9"), ieliec ketones tam pašam ierakstam; atsevišķu "ketones" ierakstu veido tikai tad, ja ketoni mērīti vieni paši.`;
 
 function textPrompt(b: Record<string, string>) {
   const isToday = b.cur === b.today;
@@ -96,6 +99,18 @@ Atbildi TIKAI ar JSON: {"ketones": skaitlis vai null, "time": "HH:MM" vai null, 
 Ja ekrānā ir LO, HI vai tas izskatās pēc glikozes mērījuma, nevis ketoniem, atgriez ketones null un error ar paskaidrojumu.`;
 }
 
+
+// Count recognition calls per user (no content) so the app owner can see usage and costs
+function callerId(auth: string): string | null {
+  try { const p = auth.split(" ")[1].split(".")[1].replace(/-/g, "+").replace(/_/g, "/"); return JSON.parse(atob(p + "===".slice((p.length + 3) % 4))).sub || null; } catch { return null; }
+}
+async function logUsage(url: string, auth: string, mode: string) {
+  const svc = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"); if (!svc) return;
+  try {
+    await fetch(`${url}/rest/v1/ai_usage`, { method: "POST", headers: { apikey: svc, Authorization: "Bearer " + svc, "Content-Type": "application/json", Prefer: "return=minimal" }, body: JSON.stringify({ user_id: callerId(auth), mode }) });
+  } catch (e) { console.error("usage log", e); }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -132,6 +147,7 @@ Deno.serve(async (req) => {
     console.error("anthropic", r.status, t.slice(0, 500));
     return json({ error: r.status === 429 ? "Pārāk daudz pieprasījumu, pagaidi brīdi" : r.status === 401 ? "API atslēga nav derīga" : r.status === 400 && /credit/i.test(t) ? "Anthropic kontā nav līdzekļu" : "Atpazīšana neizdevās" }, 502);
   }
+  logUsage(url, auth, mode);
   const data = await r.json();
   const text = (data.content || []).filter((c: { type: string }) => c.type === "text").map((c: { text: string }) => c.text).join("");
   const s = text.indexOf("{"), e = text.lastIndexOf("}");

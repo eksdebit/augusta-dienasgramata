@@ -29,6 +29,18 @@ async function transcribe(key: string, bytes: Uint8Array, mime: string, model: s
   return await fetch("https://api.openai.com/v1/audio/transcriptions", { method: "POST", headers: { Authorization: "Bearer " + key }, body: fd });
 }
 
+
+// Count recognition calls per user (no content) so the app owner can see usage and costs
+function callerId(auth: string): string | null {
+  try { const p = auth.split(" ")[1].split(".")[1].replace(/-/g, "+").replace(/_/g, "/"); return JSON.parse(atob(p + "===".slice((p.length + 3) % 4))).sub || null; } catch { return null; }
+}
+async function logUsage(url: string, auth: string, mode: string) {
+  const svc = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"); if (!svc) return;
+  try {
+    await fetch(`${url}/rest/v1/ai_usage`, { method: "POST", headers: { apikey: svc, Authorization: "Bearer " + svc, "Content-Type": "application/json", Prefer: "return=minimal" }, body: JSON.stringify({ user_id: callerId(auth), mode }) });
+  } catch (e) { console.error("usage log", e); }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -61,6 +73,7 @@ Deno.serve(async (req) => {
     console.error("openai", r.status, t.slice(0, 500));
     return json({ error: r.status === 401 ? "OpenAI atslēga nav derīga" : r.status === 429 ? (/quota|billing/i.test(t) ? "OpenAI kontā nav līdzekļu" : "Pārāk daudz pieprasījumu, pagaidi brīdi") : "Runu neizdevās pārvērst tekstā" }, 502);
   }
+  logUsage(url, auth, "voice");
   const data = await r.json();
   return json({ text: (data.text || "").trim() });
 });

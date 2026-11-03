@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Nunito:wght@700;800;900&display=swap">
-<link rel="stylesheet" href="app.css?v=6">
+<link rel="stylesheet" href="app.css?v=7">
 </head>
 <body>
 <div id="app">
@@ -36,9 +36,25 @@
         <label id="lblName" hidden>Tavs vārds (kā rādīt ierakstos)<input id="aName" autocomplete="name" placeholder="Mamma"></label>
         <label>E-pasts<input id="aEmail" type="email" autocomplete="email" inputmode="email" required></label>
         <label>Parole<input id="aPass" type="password" autocomplete="current-password" minlength="8" required></label>
+        <label class="check" id="lblConsent" hidden><input type="checkbox" id="aConsent"><span>Esmu izlasījusi(-is) <a href="privatums.html" target="_blank" rel="noopener">privātuma paziņojumu</a> un piekrītu, ka bērna veselības dati tiek glabāti šajā lietotnē.</span></label>
         <button class="btn primary" id="aSubmit" type="submit">Pieslēgties</button>
         <div class="formmsg" id="aMsg" role="status"></div>
+        <button class="link" type="button" id="aForgot">Aizmirsi paroli?</button>
       </form>
+    </div>
+  </section>
+
+  <!-- ===== privacy consent (once per version) ===== -->
+  <section id="scrConsent" class="screen center" hidden>
+    <div class="authbox">
+      <img src="icons/icon-192.png" alt="" class="authlogo" width="96" height="96">
+      <h1 class="brand">Privātums</h1>
+      <p>Cukuriņa pieraksti glabā bērna veselības datus: insulīna devas, ēdienreizes, glikozes un ketonu mērījumus, piezīmes. Tos redz tikai tie, ko pats uzaicini.</p>
+      <p><a href="privatums.html" target="_blank" rel="noopener">Izlasīt privātuma paziņojumu</a></p>
+      <label class="check"><input type="checkbox" id="cConsent"><span>Esmu izlasījusi(-is) privātuma paziņojumu un piekrītu, ka bērna veselības dati tiek glabāti šajā lietotnē.</span></label>
+      <button class="btn primary" id="cAccept" type="button">Turpināt</button>
+      <div class="formmsg" id="cMsg" role="status"></div>
+      <button class="link" type="button" id="cSignOut">Iziet</button>
     </div>
   </section>
 
@@ -85,6 +101,7 @@
           <div class="tot meal"><b id="tMv">0</b><span>MV</span></div>
           <div class="tot gluc"><b id="tTab">0</b><span>Glik. tab.</span></div>
         </div>
+        <div class="sick" id="sickStrip" hidden></div>
         <div class="pens" id="penCard" hidden></div>
         <div class="cgm" id="cgmCard" hidden></div>
         <div class="log" id="log"><div class="empty"><strong>Ielādē…</strong></div></div>
@@ -160,9 +177,16 @@
             <label>Mans vārds ierakstos<input id="myName"></label>
             <label id="gmvLbl">1 MV = g ogļhidrātu<input id="gPerMv" inputmode="decimal"></label>
             <label>Insulīna ampulu lieto dienas (pēc instrukcijas)<input id="penDays" inputmode="numeric"></label>
+            <label class="check"><input type="checkbox" id="showCalcs"><span>Pārskatā rādīt aptuvenos aprēķinus (jutība, ogļhidrāti uz 1 v, īsais uz 1 MV). Tie domāti sarunai ar ārstu, nevis devu izvēlei.</span></label>
           </div>
-          <div class="rowbtns"><button class="btn" id="saveSettings" type="button">Saglabāt</button><button class="btn" id="signOut" type="button">Iziet no konta</button></div>
+          <div class="rowbtns"><button class="btn" id="saveSettings" type="button">Saglabāt</button><button class="btn" id="changePass" type="button">Mainīt paroli</button><button class="btn" id="signOut" type="button">Iziet no konta</button></div>
         </div>
+        <div class="card" id="adminCard" hidden>
+          <h2>Lietotnes ģimenes</h2>
+          <p class="hint">Redzi tikai to, cik ģimeņu lieto lietotni un vai tām ieslēgta atpazīšana (balss un foto). Ierakstu saturu šeit neredzi. Atpazīšanas izmaksas sedz Tava API atslēga.</p>
+          <ul class="people" id="adminList"></ul>
+        </div>
+        <p class="hint center-t"><a href="privatums.html" target="_blank" rel="noopener">Privātuma paziņojums</a></p>
         <p class="hint center-t">Lai lietotne būtu telefona sākuma ekrānā: iPhone Safari → Kopīgot → “Pievienot sākuma ekrānam”; Android Chrome → ⋮ → “Instalēt lietotni”.</p>
       </div>
     </main>
@@ -199,7 +223,7 @@
 <div id="printArea" aria-hidden="true"></div>
 
 <script src="vendor/supabase-2.45.4.js"></script>
-<script src="config.js?v=6"></script>
-<script src="app.js?v=6"></script>
+<script src="config.js?v=7"></script>
+<script src="app.js?v=7"></script>
 </body>
 </html>

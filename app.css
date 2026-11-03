@@ -240,3 +240,18 @@ body.locked{position:fixed;left:0;right:0;overflow:hidden}
 .pr .sum{font-size:9pt;margin-top:3px}
 .pr .chart svg{width:100%;height:auto;max-height:42mm}
 .pr .cs{font-size:8pt;color:#6b5d4f}
+
+/* sick days, consent, admin */
+.sick{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;background:var(--sugar-soft);border-radius:14px;padding:10px 12px;font-size:.9rem;font-variant-numeric:tabular-nums}
+.sick b{font-family:var(--display)}
+.sick .lab{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:var(--sugar);width:100%}
+.bg.ket{background:var(--basal-soft);color:var(--basal)}
+.bg.ket.k2,.bg.ket.k3{background:var(--sugar-soft);color:var(--danger)}
+.k-temp .chip{background:var(--sugar-soft);color:var(--sugar)}
+.k-med .chip{background:var(--meal-soft);color:var(--meal)}
+label.check{flex-direction:row;align-items:flex-start;gap:10px;font-weight:400;letter-spacing:0;font-size:.88rem;color:var(--ink);line-height:1.4}
+label.check input{width:22px;height:22px;min-height:22px;flex:none;margin:1px 0 0;padding:0;accent-color:var(--bear)}
+label.check a,.authbox a,.hint a{color:var(--blue)}
+.authbox p{margin:0;line-height:1.5}
+.switch{display:flex;align-items:center;gap:8px;font-size:.82rem;font-weight:700;color:var(--muted);white-space:nowrap}
+.switch input{width:20px;height:20px;min-height:20px;padding:0;accent-color:var(--bear)}
