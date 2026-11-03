@@ -149,7 +149,7 @@ async function selectChild(id){
   const m = memberships.find(x => x.child_id === id);
   child = { id, name: m.children.name, ai: !!m.children.ai_enabled };
   $("#photoRow").hidden = !child.ai;
-  $("#hint").textContent = hintDefault(); $("#mic").hidden = !(child.ai && canRecord); role = m.role; gPerMv = num(m.children.g_per_mv) || 12;
+  $("#hint").hidden = true; $("#mic").hidden = true; role = m.role; gPerMv = num(m.children.g_per_mv) || 12;
   try { localStorage.setItem("child", id); } catch (_) {}
   $("#childName").textContent = child.name;
   $("#roleLabel").textContent = (m.display_name ? m.display_name + " · " : "") + ROLE[role];
