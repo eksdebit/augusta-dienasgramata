@@ -1,6 +1,6 @@
 // App shell cache. Data always comes live from the database; only the app files are cached.
-const CACHE = "cukurins-v28";
-const SHELL = ["./", "index.html", "app.css?v=28", "app.js?v=28", "config.js?v=28", "manifest.webmanifest",
+const CACHE = "cukurins-v29";
+const SHELL = ["./", "index.html", "app.css?v=29", "app.js?v=29", "config.js?v=29", "manifest.webmanifest",
   "vendor/supabase-2.45.4.js", "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png", "icons/favicon-32.png"];
 
 self.addEventListener("install", e => {

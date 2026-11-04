@@ -276,23 +276,25 @@ function withMv(e){
   }
   return e;
 }
-function ketLevel(v){ v = num(v); if (v == null) return null; return v >= 3 ? ["ļoti augsti","k3"] : v >= 1.5 ? ["augsti","k2"] : v >= 0.6 ? ["paaugstināti","k1"] : null; }
+function ketLevel(v){ v = num(v); if (v == null) return null; return v >= 3 ? ["⚠ ļoti augsti","k3"] : v >= 1.5 ? ["⚠ augsti","k2"] : v >= 0.6 ? ["▲ paaugstināti","k1"] : null; }
+// glucose ranges: below 3.9 low, 3.9–10 in range, above 10 high — always with a symbol and a word, not colour alone
+function gLevel(v){ v = num(v); if (v == null) return null; return v < 3.9 ? ["▼ zems","lo","▼"] : v > 10 ? ["▲ augsts","hi","▲"] : ["✓ diapazonā","ok","✓"]; }
 function lineFor(e, opts){
   const k = e.kind || "note"; let main = "";
   if (k === "basal" || k === "bolus") main = `<span class="big">${esc(e.insulin||"")} ${fmt(e.units)} v</span>`;
   else if (k === "meal") main = `<span class="big">${esc(e.meal||"Ēdienreize")}</span>${e.mv!=null?` <span class="big" style="color:var(--meal)">${e.mv_est?"≈":""}${fmt(e.mv,1)} MV</span>`:""}`;
-  else if (k === "glucose") main = `<span class="big">${fmt(e.glucose,1)} mmol/l</span>`;
+  else if (k === "glucose") { const G = gLevel(e.glucose); main = `<span class="big">${fmt(e.glucose,1)} mmol/l</span>${G ? ` <span class="klev ${G[1]}">${G[0]}</span>` : ""}`; }
   else if (k === "tablets") main = `<span class="big">${fmt(e.count||1)} tab.</span>`;
   else if (k === "ketones") { const L = ketLevel(e.ketones); main = `<span class="big">${fmt(e.ketones,1)} mmol/l</span>${L ? ` <span class="klev ${L[1]}">${L[0]}</span>` : ""}`; }
   else if (k === "pen") main = `<span class="big">Jauna ampula${e.insulin ? ": " + esc(e.insulin) : ""}</span>`;
-  else if (k === "temp") { const t = num(e.temp); main = `<span class="big">${fmt(t,1)} °C</span>${t >= 39 ? ` <span class="klev k2">augsta</span>` : t >= 38 ? ` <span class="klev k1">paaugstināta</span>` : ""}`; }
+  else if (k === "temp") { const t = num(e.temp); main = `<span class="big">${fmt(t,1)} °C</span>${t >= 39 ? ` <span class="klev k2">⚠ augsta</span>` : t >= 38 ? ` <span class="klev k1">▲ paaugstināta</span>` : ""}`; }
   else if (k === "med") main = `<span class="big">${esc(e.med || "")}</span>`;
   let items = "";
   if (k === "meal" && Array.isArray(e.items) && e.items.length) items = `<ul class="items">${e.items.map(i => {
     const r = []; if (i.g!=null && i.g!=="") r.push(esc(fmt(i.g,0))+" g"); if (i.oh!=null && i.oh!=="") r.push(esc(fmt(i.oh,0))+" g OH");
     return `<li><span>${esc(i.n)}</span><span>${r.join(" · ")}</span></li>`; }).join("")}</ul>`;
   const note = e.note ? `<div class="note">${esc(e.note)}</div>` : "";
-  let bg = (k !== "glucose" && e.bg != null) ? ` <span class="bg">cukurs ${fmt(e.bg,1)}</span>` : "";
+  const GB = gLevel(e.bg); let bg = (k !== "glucose" && e.bg != null) ? ` <span class="bg ${GB[1]}">${GB[2]} cukurs ${fmt(e.bg,1)}</span>` : "";
   if (k !== "ketones" && e.ketones != null) { const L = ketLevel(e.ketones); bg += ` <span class="bg ket ${L ? L[1] : ""}">ketoni ${fmt(e.ketones,1)}</span>`; }
   if (!opts || !opts.preview) { const dx = cgmNear(e.time); if (dx != null) bg += ` <span class="bg dex">Dexcom ${fmt(dx,1)}</span>`; }
   const who = (!opts || !opts.preview) && Object.keys(members).length > 1 && e.created_by && members[e.created_by] ? `<div class="who">pievienoja ${esc(members[e.created_by].display_name || members[e.created_by].email || "")}</div>` : "";
@@ -327,7 +329,7 @@ function renderLog(){
   else {
     const L = ketLevel(t.ketMax);
     sk.hidden = false;
-    sk.innerHTML = `<span class="lab">Slimības dati šajā dienā</span>` +
+    sk.innerHTML = `<span class="lab">⚠ Slimības dati šajā dienā</span>` +
       (t.ketMax != null ? `<span>Ketoni max <b>${fmt(t.ketMax,1)}</b>${L ? ` <span class="klev ${L[1]}">${L[0]}</span>` : ""}</span>` : "") +
       (t.tempMax != null ? `<span>Temperatūra max <b>${fmt(t.tempMax,1)} °C</b></span>` : "") +
       (t.meds ? `<span>Zāles <b>${t.meds}×</b></span>` : "");
@@ -366,8 +368,8 @@ function cgmSvg(c, marks, P){
   (marks||[]).forEach(m => { g += `<circle cx="${x(m[0]).toFixed(1)}" cy="${y(m[1]).toFixed(1)}" r="4.5" style="fill:${P.finger};stroke:${P.bg};stroke-width:1.5"/>`; });
   return g + `</svg>`;
 }
-const PAL_PAGE = { band:"var(--meal-soft)", grid:"var(--rule)", muted:"var(--muted)", line:"var(--blue)", low:"var(--danger)", finger:"var(--sugar)", bg:"var(--sheet)" };
-const PAL_PRINT = { band:"#e3f2e8", grid:"#e6d8c2", muted:"#6b5d4f", line:"#1C6670", low:"#b42318", finger:"#C24E36", bg:"#ffffff" };
+const PAL_PAGE = { band:"var(--ok-soft)", grid:"var(--rule)", muted:"var(--muted)", line:"var(--primary)", low:"var(--lo)", finger:"var(--caramel)", bg:"var(--sheet)" };
+const PAL_PRINT = { band:"#E3F2EC", grid:"#E8DED2", muted:"#5F6E71", line:"#087B83", low:"#C74646", finger:"#D98032", bg:"#ffffff" };
 function renderCgm(){
   const el = $("#cgmCard");
   if (!cgmDay || !cgmDay.v.length) { el.hidden = true; el.innerHTML = ""; return; }
