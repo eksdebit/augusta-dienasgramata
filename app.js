@@ -244,7 +244,7 @@ function renderDate(){
   const [y,m,d] = cur.split("-").map(Number); const dt = new Date(y,m-1,d);
   $("#wd").textContent = (cur === todayStr() ? "Šodien · " : "") + WD[dt.getDay()];
   $("#dayLabel").textContent = d + ". " + MON[m-1];
-  $("#datePick").value = cur;
+  $("#datePick").value = cur; $("#datePick").max = todayStr();
 }
 async function loadDay(quiet){
   renderDate();
@@ -262,8 +262,11 @@ async function loadDay(quiet){
 }
 $("#prev").onclick = () => { cur = shift(cur,-1); loadDay(); };
 $("#next").onclick = () => { cur = shift(cur,1); loadDay(); };
-$("#dateBtn").onclick = () => { const p = $("#datePick"); try { p.showPicker(); } catch (_) { p.focus(); p.click(); } };
-$("#datePick").onchange = e => { if (e.target.value) { cur = e.target.value; loadDay(); } };
+// the real date input lies invisibly over the date, so a tap opens the phone's own calendar
+$("#datePick").max = todayStr();
+$("#datePick").onclick = e => { try { e.target.showPicker(); } catch (_) {} };
+const pickDay = e => { const v = e.target.value; if (v && v !== cur) { cur = v; loadDay(); } };
+$("#datePick").onchange = pickDay; $("#datePick").oninput = pickDay;
 
 function sortE(a){ return a.slice().sort((x,y) => (x.time||"99").localeCompare(y.time||"99") || String(x.created_at||"").localeCompare(String(y.created_at||""))); }
 function withMv(e){

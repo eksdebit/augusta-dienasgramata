@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Nunito:wght@700;800;900&display=swap">
-<link rel="stylesheet" href="app.css?v=27">
+<link rel="stylesheet" href="app.css?v=28">
 </head>
 <body>
 <div id="app">
@@ -25,7 +25,7 @@
   <!-- ===== sign in ===== -->
   <section id="scrAuth" class="screen center" hidden>
     <div class="authbox">
-      <img src="icons/icon-192.png?v=27" alt="" class="authlogo" width="96" height="96">
+      <img src="icons/icon-192.png?v=28" alt="" class="authlogo" width="96" height="96">
       <h1 class="brand">Cukuriņa pieraksti</h1>
       <p class="muted" id="authInviteNote" hidden>Tev ir ielūgums uz dienasgrāmatu. Pieslēdzies vai izveido kontu, un tas tiks pieņemts.</p>
       <div class="seg" role="tablist">
@@ -47,7 +47,7 @@
   <!-- ===== privacy consent (once per version) ===== -->
   <section id="scrConsent" class="screen center" hidden>
     <div class="authbox">
-      <img src="icons/icon-192.png?v=27" alt="" class="authlogo" width="96" height="96">
+      <img src="icons/icon-192.png?v=28" alt="" class="authlogo" width="96" height="96">
       <h1 class="brand">Privātums</h1>
       <p>Cukuriņa pieraksti glabā bērna veselības datus: insulīna devas, ēdienreizes, glikozes un ketonu mērījumus, piezīmes. Tos redz tikai tie, ko pats uzaicini.</p>
       <p><a href="privatums.html" target="_blank" rel="noopener">Izlasīt privātuma paziņojumu</a></p>
@@ -61,7 +61,7 @@
   <!-- ===== first run ===== -->
   <section id="scrOnboard" class="screen center" hidden>
     <div class="authbox">
-      <img src="icons/icon-192.png?v=27" alt="" class="authlogo" width="96" height="96">
+      <img src="icons/icon-192.png?v=28" alt="" class="authlogo" width="96" height="96">
       <h1 class="brand">Sāksim dienasgrāmatu</h1>
       <form id="obForm" class="form">
         <label>Bērna vārds<input id="obChild" required></label>
@@ -81,7 +81,7 @@
   <!-- ===== main app ===== -->
   <section id="scrMain" class="screen" hidden>
     <header class="topbar">
-      <img src="icons/icon-192.png?v=27" alt="" width="36" height="36" class="toplogo">
+      <img src="icons/icon-192.png?v=28" alt="" width="36" height="36" class="toplogo">
       <div class="toptitle"><b id="childName">Augusts</b><span id="roleLabel"></span></div>
       <select id="childSel" aria-label="Dienasgrāmata" hidden></select>
     </header>
@@ -91,8 +91,7 @@
       <div id="viewDay" class="view">
         <div class="datebar">
           <button class="navbtn" id="prev" type="button" aria-label="Iepriekšējā diena">‹</button>
-          <button class="d" id="dateBtn" type="button"><span class="wd" id="wd"></span><span class="day" id="dayLabel"></span></button>
-          <input type="date" id="datePick" class="vh" tabindex="-1" aria-hidden="true">
+          <label class="d" id="dateBtn"><span class="wd" id="wd"></span><span class="day"><span id="dayLabel"></span><svg class="cal" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3.5 10h17M8 3v4M16 3v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span><input type="date" id="datePick" class="dpick" aria-label="Izvēlēties dienu kalendārā"></label>
           <button class="navbtn" id="next" type="button" aria-label="Nākamā diena">›</button>
         </div>
         <div class="totals">
@@ -235,7 +234,7 @@
 <div id="printArea" aria-hidden="true"></div>
 
 <script src="vendor/supabase-2.45.4.js"></script>
-<script src="config.js?v=27"></script>
-<script src="app.js?v=27"></script>
+<script src="config.js?v=28"></script>
+<script src="app.js?v=28"></script>
 </body>
 </html>
