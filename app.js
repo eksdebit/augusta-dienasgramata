@@ -570,6 +570,35 @@ async function loadPeriod(){
   pCgm = {}; (c.data || []).forEach(x => pCgm[x.date] = { t: x.t.map(Number), v: x.v.map(Number) });
   renderStats();
 }
+
+/* sensitivity from real corrections: Apidra without food, glucose before and 75–240 min after */
+function isfEvents(){
+  const ev = [];
+  const T = e => { if (!e.time) return null; const [h,m] = e.time.split(":").map(Number); return h*60+m; };
+  Object.keys(pByDay).forEach(d => {
+    const L = pByDay[d], c = pCgm[d];
+    const reads = [];
+    L.forEach(e => { const t = T(e); if (t == null) return; const g = e.kind === "glucose" ? num(e.glucose) : num(e.bg); if (g != null) reads.push([t, g]); });
+    const cg = t => { if (!c) return null; let best = null, bd = 8; c.t.forEach((x,i) => { const dd = Math.abs(x - t); if (dd < bd) { bd = dd; best = Number(c.v[i]); } }); return best; };
+    L.filter(e => e.kind === "bolus" && num(e.units) > 0 && T(e) != null).forEach(b => {
+      const t0 = T(b);
+      let pre = num(b.bg);
+      if (pre == null) { const r = reads.filter(([t]) => t >= t0-30 && t <= t0+5).sort((a,z) => Math.abs(a[0]-t0) - Math.abs(z[0]-t0))[0]; pre = r ? r[1] : cg(t0); }
+      if (pre == null) return;
+      // food, glucose tablets or another dose before the "after" reading spoil the measurement
+      const blockedUntil = tp => L.some(e => { if (e === b) return false; const t = T(e); if (t == null || t < t0-30 || t >= tp) return false; return e.kind === "meal" || e.kind === "tablets" || e.kind === "bolus"; });
+      const cands = reads.filter(([t]) => t >= t0+75 && t <= t0+240).sort((a,z) => Math.abs(a[0]-t0-150) - Math.abs(z[0]-t0-150));
+      if (!cands.length) { const v = cg(t0+150); if (v != null) cands.push([t0+150, v]); }
+      const ok = cands.find(([t]) => !blockedUntil(t));
+      if (!ok) return;
+      const post = ok[1];
+      const drop = pre - post; if (drop <= 0) return;
+      ev.push({ d, time: b.time, isf: drop / num(b.units) });
+    });
+  });
+  return ev;
+}
+function median(a){ if (!a.length) return null; const s = a.slice().sort((x,y) => x-y), m = Math.floor(s.length/2); return s.length % 2 ? s[m] : (s[m-1]+s[m])/2; }
 function periodStats(){
   const days = Array.from(new Set(Object.keys(pByDay).concat(Object.keys(pCgm)))).sort();
   const per = days.map(d => Object.assign({ date: d, cgm: cgmStats([pCgm[d]]) }, dayTotals(pByDay[d] || [])));
@@ -581,7 +610,7 @@ function periodStats(){
   const tdd = avg("tdd");
   return { days, per, n, bas: avg("bas"), bol: avg("bol"), tdd,
     mv: mvDays.length ? mvDays.reduce((s,p) => s + p.mv, 0)/mvDays.length : null,
-    perMv: sumMvI > 0 ? sumBol/sumMvI : null, isf: tdd ? 100/tdd : null, cr: tdd ? 500/tdd : null,
+    perMv: sumMvI > 0 ? sumBol/sumMvI : null, isf: tdd ? 100/tdd : null, isfEv: isfEvents(), cr: tdd ? 500/tdd : null,
     basPct: tdd ? avg("bas")/tdd*100 : null, tab: per.reduce((s,p) => s + p.tab, 0),
     cgm: cgmStats(Object.values(pCgm)),
     gAvg: gAll.length ? gAll.reduce((a,b) => a+b, 0)/gAll.length : null, gN: gAll.length };
@@ -595,8 +624,13 @@ function renderStats(){
     st(fmt(S.bol,1)+(S.bol!=null?" v":""), "Vid. īsais dienā", "") +
     st(S.mv!=null ? fmt(S.mv,1)+" MV" : "", "Vid. MV dienā", "") +
     st(S.perMv!=null ? fmt(S.perMv,2)+" v" : "", "Īsais uz 1 MV", "tik vienību Apidra vidēji iedots uz 1 MV (ar korekcijām)", true) +
-    st(S.isf!=null ? fmt(S.isf,1)+" mmol/l" : "", "Jutība uz 1 v", "par cik mmol/l 1 v Apidra aptuveni pazemina cukuru · 100 ÷ vid. dienas deva", true) +
+    (() => { const m = median(S.isfEv.map(x => x.isf)); const n = S.isfEv.length;
+      return st(S.isf!=null ? fmt(S.isf,1)+" mmol/l" : "", "Jutība uz 1 v",
+        "par cik mmol/l 1 v Apidra pazemina cukuru · pēc kopējās dienas devas: 100 ÷ " + (S.tdd!=null ? fmt(S.tdd,1) : "—") + " v" +
+        (m != null ? ` · pēc ${n} ${n === 1 ? "korekcijas" : "korekcijām"} bez ēdiena: ${fmt(m,1)} mmol/l` + (n < 3 ? " (vēl maz datu)" : "") : " · no korekcijām vēl nav datu"), true); })() +
     st(S.perMv ? fmt(gPerMv/S.perMv,0)+" g" : "", "OH uz 1 v", S.perMv ? "cik g ogļhidrātu vidēji nosegusi 1 v Apidra (≈ " + fmt(1/S.perMv,1) + " MV) · pēc Jūsu ierakstiem, ar korekcijām" : "") +
+    (() => { const m = median(S.isfEv.map(x => x.isf)); const isfUse = S.isf != null ? S.isf : m; const g = S.perMv && isfUse ? (gPerMv/S.perMv) / isfUse : null; const gReal = S.perMv && m ? (gPerMv/S.perMv) / m : null; return st(g != null ? fmt(g,1)+" g" : "—", "Glikoze uz +1 mmol/l",
+      g != null ? "cik g tīras glikozes paaugstina cukuru par 1 mmol/l · OH uz 1 v ÷ jutība" + (gReal != null && Math.abs(gReal - g) >= 0.1 ? ` · pēc korekcijām: ${fmt(gReal,1)} g` : "") : "cik g tīras glikozes paaugstina cukuru par 1 mmol/l · vajag MV un insulīna ierakstus"); })() +
     st(S.gAvg!=null ? fmt(S.gAvg,1)+" mmol/l" : "", "Vid. cukurs no pirksta", S.gN ? S.gN+" mērījumi" : "Nav mērījumu") +
     (S.cgm ? st(fmt(S.cgm.tir,0)+"%", "Dexcom: laiks diapazonā", "3,9–10 mmol/l", true) + st(fmt(S.cgm.avg,1)+" mmol/l", "Dexcom vidējais", `zem 3,9: ${fmt(S.cgm.lo,0)}% · virs 10: ${fmt(S.cgm.hi,0)}%`)
            : st("", "Dexcom dati", "nav importēti šim periodam") + st(fmt(S.tab), "Glikozes tabletes kopā", ""));
@@ -625,7 +659,7 @@ function printHTML(from, to, byDay, cgm){
   }).join("");
   const box = (v,l) => `<div><b>${v || "—"}</b><span>${l}</span></div>`;
   return `<div class="pr"><h1>${esc(child.name)} · Cukuriņa pieraksti</h1><div class="sub">${from === to ? esc(prettyDate(from)) : esc(prettyDate(from)) + " – " + esc(prettyDate(to))}</div>
-    ${from === to ? "" : `<div class="pstats">${box(S.tdd!=null?fmt(S.tdd,1)+" v":"", "Vid. kopējā deva dienā")}${box(S.bas!=null?fmt(S.bas,1)+" v":"", "Vid. ilgais")}${box(S.bol!=null?fmt(S.bol,1)+" v":"", "Vid. īsais")}${box(S.mv!=null?fmt(S.mv,1)+" MV":"", "Vid. MV dienā")}${box(S.perMv!=null?fmt(S.perMv,2)+" v":"", "Īsais uz 1 MV")}${box(S.isf!=null?fmt(S.isf,1)+" mmol/l":"", "Jutība uz 1 v")}${box(S.cgm?fmt(S.cgm.tir,0)+"%":"", "Dexcom diapazonā 3,9–10")}${box(S.cgm?fmt(S.cgm.avg,1)+" mmol/l":(S.gAvg!=null?fmt(S.gAvg,1)+" mmol/l":""), S.cgm ? "Dexcom vidējais" : "Vid. cukurs no pirksta")}</div>`}
+    ${from === to ? "" : `<div class="pstats">${box(S.tdd!=null?fmt(S.tdd,1)+" v":"", "Vid. kopējā deva dienā")}${box(S.bas!=null?fmt(S.bas,1)+" v":"", "Vid. ilgais")}${box(S.bol!=null?fmt(S.bol,1)+" v":"", "Vid. īsais")}${box(S.mv!=null?fmt(S.mv,1)+" MV":"", "Vid. MV dienā")}${box(S.perMv!=null?fmt(S.perMv,2)+" v":"", "Īsais uz 1 MV")}${(() => { const m = median(S.isfEv.map(x => x.isf)); return box(S.isf!=null?fmt(S.isf,1)+" mmol/l":"", "Jutība uz 1 v (100 ÷ dienas deva)" + (m!=null ? "; pēc korekcijām " + fmt(m,1) : "")); })()}${box(S.cgm?fmt(S.cgm.tir,0)+"%":"", "Dexcom diapazonā 3,9–10")}${box(S.cgm?fmt(S.cgm.avg,1)+" mmol/l":(S.gAvg!=null?fmt(S.gAvg,1)+" mmol/l":""), S.cgm ? "Dexcom vidējais" : "Vid. cukurs no pirksta")}</div>`}
     <div class="pdisc">Aprēķini ir aptuveni un domāti sarunai ar endokrinologu. 1 MV = ${fmt(gPerMv)} g ogļhidrātu. “≈” — MV aprēķinātas no ēdienu sastāva.</div>
     ${dayHTML || "<p>Šajā periodā nav ierakstu.</p>"}</div>`;
 }
