@@ -595,8 +595,8 @@ function renderStats(){
     st(fmt(S.bol,1)+(S.bol!=null?" v":""), "Vid. īsais dienā", "") +
     st(fmt(S.mv,1), "Vid. MV dienā", "") +
     st(S.perMv!=null ? fmt(S.perMv,2)+" v" : "", "Īsais uz 1 MV", "faktiski, ieskaitot korekcijas", true) +
-    st(S.isf!=null ? fmt(S.isf,1) : "", "Jutība, mmol/l uz 1 v", "100 likums: 100 ÷ kopējā deva", true) +
-    st(S.cr!=null ? fmt(S.cr,0)+" g" : "", "OH uz 1 v", "500 likums ≈ " + (S.cr!=null ? fmt(S.cr/gPerMv,1)+" MV" : "—")) +
+    st(S.isf!=null ? fmt(S.isf,1) : "", "Jutība, mmol/l uz 1 v", "aptuveni: 100 ÷ vid. kopējā dienas deva", true) +
+    st(S.cr!=null ? fmt(S.cr,0)+" g" : "", "OH uz 1 v", "aptuveni: 500 ÷ vid. kopējā dienas deva" + (S.cr!=null ? " ≈ " + fmt(S.cr/gPerMv,1)+" MV" : "")) +
     st(S.gAvg!=null ? fmt(S.gAvg,1) : "", "Vid. cukurs no pirksta", S.gN ? S.gN+" mērījumi" : "Nav mērījumu") +
     (S.cgm ? st(fmt(S.cgm.tir,0)+"%", "Dexcom: laiks diapazonā", "3,9–10 mmol/l", true) + st(fmt(S.cgm.avg,1), "Dexcom vid., mmol/l", `zem 3,9: ${fmt(S.cgm.lo,0)}% · virs 10: ${fmt(S.cgm.hi,0)}%`)
            : st("", "Dexcom dati", "nav importēti šim periodam") + st(fmt(S.tab), "Glikozes tabletes kopā", ""));
