@@ -1,13 +1,13 @@
 /* Layout: one narrow column like a diary page — top bar, date, day totals, sensor curve, time-ruled log; dictation dock and tab bar pinned at the bottom.
-   Palette taken from the bear icon: cream paper, honey-brown, soft sky blue. */
+   Palette taken from the heart icon: cream paper, teal and amber heart, teal curve, amber drop; entry colors (meal green, insulin violet/blue) unchanged. */
 :root{
-  --paper:#FAF7F2; --sheet:#F0E6DC; --bar:#F7F0E8; --ink:#4E3B30; --muted:#79685C; --rule:#E3D5C6;
-  --bear:#a8642c; --bear-soft:#f6e6d3;
-  --blue:#2f6fc0; --blue-soft:#e4eefb;
+  --paper:#FBF6F0; --sheet:#F4EAE0; --bar:#F8EFE6; --ink:#4E3B30; --muted:#79685C; --rule:#E6D8CA;
+  --bear:#B85F26; --bear-soft:#FAE5D2;
+  --blue:#1C6670; --blue-soft:#DCEDEE;
   --basal:#7048b8; --basal-soft:#efe8fa;
   --bolus:#2f6fc0; --bolus-soft:#e4eefb;
   --meal:#2f7a4b; --meal-soft:#e3f2e8;
-  --sugar:#bf4d23; --sugar-soft:#fbe7dd;
+  --sugar:#C24E36; --sugar-soft:#FBE4DC;
   --gluc:#94680a; --gluc-soft:#faefd2;
   --danger:#b42318; --onaccent:#ffffff;
   --display:"Nunito", "Arial Rounded MT Bold", system-ui, sans-serif;
@@ -48,7 +48,7 @@ input,select,textarea{font-size:16px;font-weight:400;letter-spacing:0;background
 
 /* buttons */
 .btn{min-height:46px;border-radius:12px;border:1px solid var(--rule);background:var(--sheet);padding:0 16px;font-weight:700}
-.btn.primary{background:var(--bear);border-color:var(--bear);color:var(--onaccent)}
+.btn.primary{background:var(--blue);border-color:var(--blue);color:var(--onaccent)}
 .btn.small{min-height:38px;font-size:.88rem;color:var(--muted)}
 .btn.danger{color:var(--danger)}
 .btn:disabled{opacity:.55}
@@ -137,7 +137,7 @@ body.nodock .wrap{padding-bottom:calc(96px + var(--safe-b))}
 .chips.presets{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
 .chips.presets .pchip{padding-left:4px;padding-right:4px;font-size:.85rem;white-space:nowrap;text-align:center;min-width:0}
 .pchip{border:1px solid var(--rule);background:var(--sheet);border-radius:999px;padding:7px 13px;font-size:.88rem}
-.pchip[aria-pressed="true"]{background:var(--bear);color:var(--onaccent);border-color:var(--bear)}
+.pchip[aria-pressed="true"]{background:var(--blue);color:var(--onaccent);border-color:var(--blue)}
 .range{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
 .range label,.range input{min-width:0}
 input[type=date]{-webkit-appearance:none;appearance:none}
@@ -183,7 +183,7 @@ body.typing .dock{padding-bottom:8px}
 .tabbar{position:fixed;left:0;right:0;bottom:0;z-index:7;display:flex;background:var(--bar);border-top:1px solid var(--rule);
   padding:4px max(8px,env(safe-area-inset-right,0px)) calc(4px + var(--safe-b)) max(8px,env(safe-area-inset-left,0px))}
 .tabbar button{flex:1;border:0;background:none;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:.74rem;font-weight:700;color:var(--muted);padding:6px 0;min-height:56px}
-.tabbar button[aria-current="page"]{color:var(--bear)}
+.tabbar button[aria-current="page"]{color:var(--blue)}
 
 /* sheets */
 .sheet-bg{position:fixed;inset:0;background:rgba(30,20,10,.45);display:flex;align-items:flex-end;justify-content:center;z-index:20}
@@ -209,16 +209,16 @@ body.locked{position:fixed;left:0;right:0;overflow:hidden}
   #printArea{display:block}
 }
 .pr{font-family:var(--body);color:#1b160f;font-size:10.5pt}
-.pr h1{font-family:var(--display);font-size:18pt;margin:0 0 2px;color:#8a4f1f}
+.pr h1{font-family:var(--display);font-size:18pt;margin:0 0 2px;color:#94481A}
 .pr .sub{color:#6b5d4f;margin-bottom:10px}
 .pr .pstats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:8px 0 12px}
 .pr .pstats div{border:1px solid #e3d4bd;border-radius:6px;padding:6px}
 .pr .pstats b{display:block;font-size:13pt}
 .pr .pstats span{font-size:8pt;color:#6b5d4f}
 .pr .pdisc{font-size:8pt;color:#6b5d4f;margin-bottom:10px}
-.pr .pday{break-inside:avoid;page-break-inside:avoid;margin-bottom:14px;border-top:2px solid #a8642c;padding-top:5px}
+.pr .pday{break-inside:avoid;page-break-inside:avoid;margin-bottom:14px;border-top:2px solid #B35F27;padding-top:5px}
 .pr .pday h2{font-size:12.5pt;margin:0 0 5px}
-.pr .num{font-size:19pt;color:#a8642c;margin-right:6px}
+.pr .num{font-size:19pt;color:#B35F27;margin-right:6px}
 .pr table{width:100%;border-collapse:collapse;font-size:9.5pt}
 .pr th{font-size:7.5pt;text-transform:uppercase;color:#6b5d4f;text-align:left;border-bottom:1px solid #d9c8ae;padding:3px 4px}
 .pr td{padding:3px 4px;border-bottom:1px dotted #d9c8ae;vertical-align:top;text-align:left;white-space:normal}

@@ -363,7 +363,7 @@ function cgmSvg(c, marks, P){
   return g + `</svg>`;
 }
 const PAL_PAGE = { band:"var(--meal-soft)", grid:"var(--rule)", muted:"var(--muted)", line:"var(--blue)", low:"var(--danger)", finger:"var(--sugar)", bg:"var(--sheet)" };
-const PAL_PRINT = { band:"#e3f2e8", grid:"#e6d8c2", muted:"#6b5d4f", line:"#2f6fc0", low:"#b42318", finger:"#bf4d23", bg:"#ffffff" };
+const PAL_PRINT = { band:"#e3f2e8", grid:"#e6d8c2", muted:"#6b5d4f", line:"#1C6670", low:"#b42318", finger:"#C24E36", bg:"#ffffff" };
 function renderCgm(){
   const el = $("#cgmCard");
   if (!cgmDay || !cgmDay.v.length) { el.hidden = true; el.innerHTML = ""; return; }
