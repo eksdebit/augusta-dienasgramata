@@ -8,12 +8,13 @@ const sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, {
 
 const WD = ["Svētdiena","Pirmdiena","Otrdiena","Trešdiena","Ceturtdiena","Piektdiena","Sestdiena"];
 const MON = ["janvāris","februāris","marts","aprīlis","maijs","jūnijs","jūlijs","augusts","septembris","oktobris","novembris","decembris"];
-const KIND = { basal:"Ilgais insulīns", bolus:"Īsais insulīns", meal:"Ēdiens", glucose:"Cukurs", tablets:"Glikozes tabl.", note:"Piezīme" };
+const KIND = { basal:"Ilgais insulīns", bolus:"Īsais insulīns", meal:"Ēdiens", glucose:"Cukurs", ketones:"Ketoni", tablets:"Glikozes tabl.", pen:"Insulīna maiņa", temp:"Temperatūra", med:"Zāles", note:"Piezīme" };
+const CONSENT_VERSION = "2026-11";
 const ROLE = { owner:"Īpašniece", family:"Ģimene", caregiver:"Aprūpētājs" };
 const LO = 3.9, HI = 10;
 
-let booted = false;
-let user = null, memberships = [], child = null, role = null, members = {}, gPerMv = 12, tabletG = null;
+let booted = false, showCalcs = false, isAdmin = false;
+let user = null, memberships = [], child = null, role = null, members = {}, gPerMv = 12, penDays = 30, tabletG = null;
 let cur = todayStr(), entries = [], cgmDay = null, channel = null, view = "day";
 let period = { from: shift(todayStr(), -6), to: todayStr() }, pEntries = [], pByDay = {}, pCgm = {};
 
@@ -28,7 +29,7 @@ function esc(s){ return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","
 function prettyDate(ds){ const [y,m,d] = ds.split("-").map(Number); const dt = new Date(y,m-1,d); return WD[dt.getDay()]+", "+d+". "+MON[m-1]; }
 function shortDate(ds){ return ds.slice(8)+"."+ds.slice(5,7)+"."; }
 function toast(t){ const el = document.createElement("div"); el.className = "toast"; el.textContent = t; document.body.appendChild(el); setTimeout(() => el.remove(), 2600); }
-function show(id){ ["scrAuth","scrOnboard","scrMain"].forEach(s => $("#"+s).hidden = s !== id); }
+function show(id){ ["scrAuth","scrConsent","scrOnboard","scrMain"].forEach(s => $("#"+s).hidden = s !== id); }
 function canEdit(e){ return role === "owner" || role === "family" || (e && e.created_by === user.id); }
 function canCgm(){ return role === "owner" || role === "family"; }
 async function fnError(error){
@@ -56,6 +57,7 @@ function setMode(m){
   $("#lblName").hidden = m !== "up";
   $("#aPass").autocomplete = m === "up" ? "new-password" : "current-password";
   $("#aSubmit").textContent = m === "up" ? "Izveidot kontu" : "Pieslēgties";
+  $("#lblConsent").hidden = m !== "up"; $("#aForgot").hidden = true; // shown again once e-mail sending (SMTP) is set up in Supabase
   $("#aMsg").textContent = ""; $("#aMsg").className = "formmsg";
 }
 $("#tabIn").onclick = () => setMode("in");
@@ -70,6 +72,8 @@ $("#authForm").onsubmit = async ev => {
     if (mode === "up") {
       const name = $("#aName").value.trim();
       if (!name) { msg.textContent = "Ievadi savu vārdu."; return; }
+      if (!$("#aConsent").checked) { msg.textContent = "Lai izveidotu kontu, jāpiekrīt privātuma paziņojumam."; return; }
+      try { localStorage.setItem("consentPending", CONSENT_VERSION); } catch (_) {}
       try { localStorage.setItem("myName", name); } catch (_) {}
       const { data, error } = await sb.auth.signUp({ email, password, options: { data: { display_name: name }, emailRedirectTo: location.origin + location.pathname } });
       if (error) throw error;
@@ -88,7 +92,37 @@ $("#authForm").onsubmit = async ev => {
   } finally { btn.disabled = false; }
 };
 
+$("#aForgot").onclick = async () => {
+  const email = $("#aEmail").value.trim().toLowerCase(); const msg = $("#aMsg");
+  if (!email) { msg.className = "formmsg"; msg.textContent = "Ieraksti savu e-pastu un spied vēlreiz “Aizmirsi paroli?”."; $("#aEmail").focus(); return; }
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+  if (error && /rate limit/i.test(error.message)) { msg.className = "formmsg"; msg.textContent = "Pārāk daudz mēģinājumu, pagaidi brīdi."; return; }
+  msg.className = "formmsg ok"; msg.textContent = "Ja šim e-pastam ir konts, uz to aizsūtīta saite jaunas paroles iestatīšanai. Pārbaudi arī mēstuļu mapi.";
+};
+function openPassSheet(fromReset){
+  const wrap = document.createElement("div"); wrap.className = "sheet-bg";
+  wrap.innerHTML = `<div class="sheet" role="dialog" aria-label="Jauna parole"><h2>${fromReset ? "Iestati jaunu paroli" : "Mainīt paroli"}</h2>
+    <label>Jaunā parole<input id="np1" type="password" autocomplete="new-password" minlength="8"></label>
+    <label>Atkārto paroli<input id="np2" type="password" autocomplete="new-password" minlength="8"></label>
+    <div class="formmsg" id="npMsg" role="status"></div>
+    <div class="rowbtns"><button class="btn" id="npCancel" type="button">Atcelt</button><button class="btn primary" id="npSave" type="button">Saglabāt paroli</button></div></div>`;
+  $("#sheetHost").innerHTML = ""; $("#sheetHost").appendChild(wrap);
+  const q = s => wrap.querySelector(s);
+  q("#npCancel").onclick = closeSheet;
+  q("#npSave").onclick = async () => {
+    const a = q("#np1").value, b = q("#np2").value;
+    if (a.length < 8) { q("#npMsg").textContent = "Parolei jābūt vismaz 8 simbolus garai."; return; }
+    if (a !== b) { q("#npMsg").textContent = "Paroles nesakrīt."; return; }
+    q("#npSave").disabled = true;
+    const { error } = await sb.auth.updateUser({ password: a });
+    if (error) { q("#npSave").disabled = false; q("#npMsg").textContent = /different from the old/i.test(error.message) ? "Jaunajai parolei jāatšķiras no vecās." : "Neizdevās: " + error.message; return; }
+    closeSheet(); toast("Parole nomainīta");
+  };
+  setTimeout(() => q("#np1").focus(), 50);
+}
+
 sb.auth.onAuthStateChange((evt, session) => {
+  if (evt === "PASSWORD_RECOVERY") setTimeout(() => openPassSheet(true), 400);
   const u = session ? session.user : null;
   if (booted && (u && u.id) === (user && user.id)) return;
   booted = true; user = u;
@@ -101,6 +135,7 @@ async function boot(){
     if (pendingInvite()) setMode("up");
     show("scrAuth"); return;
   }
+  await hasConsent(); // records consent given at sign-up; existing users are not asked again for now
   const inv = pendingInvite();
   if (inv) {
     const nm = myDefaultName();
@@ -109,19 +144,39 @@ async function boot(){
     if (error) toast("Ielūgums nav derīgs vai ir beidzies"); else toast("Ielūgums pieņemts");
   }
   await loadMemberships();
+  { const r = await sb.rpc("am_i_admin"); isAdmin = !r.error && r.data === true; }
   if (!memberships.length) { show("scrOnboard"); $("#obMe").value = myDefaultName(); return; }
   let pick = null; try { pick = localStorage.getItem("child"); } catch (_) {}
   const m = memberships.find(x => x.child_id === pick) || memberships[0];
   await selectChild(m.child_id);
   show("scrMain");
 }
+async function hasConsent(){
+  const { data, error } = await sb.from("consents").select("version").eq("user_id", user.id).eq("version", CONSENT_VERSION).maybeSingle();
+  if (data) return true;
+  if (error) return true; // never lock the family out of the diary because of a network error
+  let pend = null; try { pend = localStorage.getItem("consentPending"); } catch (_) {}
+  if (pend === CONSENT_VERSION) {
+    const r = await sb.from("consents").insert({ user_id: user.id, version: CONSENT_VERSION });
+    try { localStorage.removeItem("consentPending"); } catch (_) {}
+    if (!r.error) return true;
+  }
+  return false;
+}
+$("#cAccept").onclick = async () => {
+  if (!$("#cConsent").checked) { $("#cMsg").textContent = "Lai turpinātu, atzīmē piekrišanu."; return; }
+  const { error } = await sb.from("consents").insert({ user_id: user.id, version: CONSENT_VERSION });
+  if (error && !/duplicate/i.test(error.message)) { $("#cMsg").textContent = "Neizdevās saglabāt: " + error.message; return; }
+  boot();
+};
+$("#cSignOut").onclick = () => sb.auth.signOut();
 function myDefaultName(){
   let n = ""; try { n = localStorage.getItem("myName") || ""; } catch (_) {}
   return n || (user && user.user_metadata && user.user_metadata.display_name) || "";
 }
 
 async function loadMemberships(){
-  const { data, error } = await sb.from("members").select("child_id, role, display_name, children(name, g_per_mv, ai_enabled, tablet_g)").eq("user_id", user.id);
+  const { data, error } = await sb.from("members").select("child_id, role, display_name, children(name, g_per_mv, ai_enabled, pen_days, show_calcs, tablet_g)").eq("user_id", user.id);
   memberships = error ? [] : (data || []);
 }
 
@@ -149,7 +204,7 @@ async function selectChild(id){
   const m = memberships.find(x => x.child_id === id);
   child = { id, name: m.children.name, ai: !!m.children.ai_enabled };
   $("#photoRow").hidden = !child.ai;
-  $("#hint").hidden = true; $("#mic").hidden = true; role = m.role; gPerMv = num(m.children.g_per_mv) || 12; tabletG = num(m.children.tablet_g);
+  $("#hint").hidden = true; $("#mic").hidden = true; role = m.role; gPerMv = num(m.children.g_per_mv) || 12; penDays = num(m.children.pen_days) || 30; showCalcs = !!m.children.show_calcs; tabletG = num(m.children.tablet_g);
   try { localStorage.setItem("child", id); } catch (_) {}
   $("#childName").textContent = child.name;
   $("#roleLabel").textContent = (m.display_name ? m.display_name + " · " : "") + ROLE[role];
@@ -203,7 +258,7 @@ async function loadDay(quiet){
   if (e.error) { $("#log").innerHTML = `<div class="empty"><strong>Neizdevās ielādēt</strong>${esc(e.error.message)}</div>`; return; }
   entries = e.data || [];
   cgmDay = c.data ? { t: c.data.t.map(Number), v: c.data.v.map(Number) } : null;
-  renderLog(); renderCgm();
+  renderLog(); renderCgm(); loadPens();
 }
 $("#prev").onclick = () => { cur = shift(cur,-1); loadDay(); };
 $("#next").onclick = () => { cur = shift(cur,1); loadDay(); };
@@ -218,32 +273,41 @@ function withMv(e){
   }
   return e;
 }
+function ketLevel(v){ v = num(v); if (v == null) return null; return v >= 3 ? ["ļoti augsti","k3"] : v >= 1.5 ? ["augsti","k2"] : v >= 0.6 ? ["paaugstināti","k1"] : null; }
 function lineFor(e, opts){
   const k = e.kind || "note"; let main = "";
   if (k === "basal" || k === "bolus") main = `<span class="big">${esc(e.insulin||"")} ${fmt(e.units)} v</span>`;
   else if (k === "meal") main = `<span class="big">${esc(e.meal||"Ēdienreize")}</span>${e.mv!=null?` <span class="big" style="color:var(--meal)">${e.mv_est?"≈":""}${fmt(e.mv,1)} MV</span>`:""}`;
   else if (k === "glucose") main = `<span class="big">${fmt(e.glucose,1)} mmol/l</span>`;
   else if (k === "tablets") main = `<span class="big">${fmt(e.count||1)} tab.</span>`;
+  else if (k === "ketones") { const L = ketLevel(e.ketones); main = `<span class="big">${fmt(e.ketones,1)} mmol/l</span>${L ? ` <span class="klev ${L[1]}">${L[0]}</span>` : ""}`; }
+  else if (k === "pen") main = `<span class="big">Jauna ampula${e.insulin ? ": " + esc(e.insulin) : ""}</span>`;
+  else if (k === "temp") { const t = num(e.temp); main = `<span class="big">${fmt(t,1)} °C</span>${t >= 39 ? ` <span class="klev k2">augsta</span>` : t >= 38 ? ` <span class="klev k1">paaugstināta</span>` : ""}`; }
+  else if (k === "med") main = `<span class="big">${esc(e.med || "")}</span>`;
   let items = "";
   if (k === "meal" && Array.isArray(e.items) && e.items.length) items = `<ul class="items">${e.items.map(i => {
     const r = []; if (i.g!=null && i.g!=="") r.push(esc(fmt(i.g,0))+" g"); if (i.oh!=null && i.oh!=="") r.push(esc(fmt(i.oh,0))+" g OH");
     return `<li><span>${esc(i.n)}</span><span>${r.join(" · ")}</span></li>`; }).join("")}</ul>`;
   const note = e.note ? `<div class="note">${esc(e.note)}</div>` : "";
   let bg = (k !== "glucose" && e.bg != null) ? ` <span class="bg">cukurs ${fmt(e.bg,1)}</span>` : "";
+  if (k !== "ketones" && e.ketones != null) { const L = ketLevel(e.ketones); bg += ` <span class="bg ket ${L ? L[1] : ""}">ketoni ${fmt(e.ketones,1)}</span>`; }
   if (!opts || !opts.preview) { const dx = cgmNear(e.time); if (dx != null) bg += ` <span class="bg dex">Dexcom ${fmt(dx,1)}</span>`; }
   const who = (!opts || !opts.preview) && Object.keys(members).length > 1 && e.created_by && members[e.created_by] ? `<div class="who">pievienoja ${esc(members[e.created_by].display_name || members[e.created_by].email || "")}</div>` : "";
   return `<div class="tm">${esc(e.time||"—")}</div><div class="body"><div class="line1"><span class="chip">${KIND[k]||k}</span>${main}${bg}</div>${items}${note}${who}</div>`;
 }
 function dayTotals(list){
-  let bas=0,bol=0,mv=0,tab=0,gs=[];
+  let bas=0,bol=0,mv=0,tab=0,gs=[],ketMax=null,tempMax=null,meds=0;
   list.forEach(e => {
+    const kv = num(e.ketones); if (kv != null && (ketMax == null || kv > ketMax)) ketMax = kv;
+    if (e.kind==="temp") { const tv = num(e.temp); if (tv != null && (tempMax == null || tv > tempMax)) tempMax = tv; }
+    if (e.kind==="med") meds++;
     if (e.kind==="basal") bas += num(e.units)||0;
     if (e.kind==="bolus") bol += num(e.units)||0;
     if (e.kind==="meal") mv += num(e.mv)||0;
     if (e.kind==="tablets") tab += num(e.count)||1;
     const g = e.kind==="glucose" ? num(e.glucose) : num(e.bg); if (g!=null) gs.push(g);
   });
-  return { bas, bol, tdd: bas+bol, mv, tab, gAvg: gs.length ? gs.reduce((a,b)=>a+b,0)/gs.length : null, gN: gs.length };
+  return { bas, bol, tdd: bas+bol, mv, tab, ketMax, tempMax, meds, gAvg: gs.length ? gs.reduce((a,b)=>a+b,0)/gs.length : null, gN: gs.length };
 }
 function renderLog(){
   const log = $("#log"); const list = sortE(entries);
@@ -254,6 +318,16 @@ function renderLog(){
   }
   const t = dayTotals(list);
   $("#tBasal").textContent = fmt(t.bas); $("#tBolus").textContent = fmt(t.bol); $("#tMv").textContent = fmt(t.mv,1); $("#tTab").textContent = fmt(t.tab);
+  const sk = $("#sickStrip");
+  if (t.ketMax == null && t.tempMax == null && !t.meds) { sk.hidden = true; sk.innerHTML = ""; }
+  else {
+    const L = ketLevel(t.ketMax);
+    sk.hidden = false;
+    sk.innerHTML = `<span class="lab">Slimības diena</span>` +
+      (t.ketMax != null ? `<span>Ketoni max <b>${fmt(t.ketMax,1)}</b>${L ? ` <span class="klev ${L[1]}">${L[0]}</span>` : ""}</span>` : "") +
+      (t.tempMax != null ? `<span>Temperatūra max <b>${fmt(t.tempMax,1)} °C</b></span>` : "") +
+      (t.meds ? `<span>Zāles <b>${t.meds}×</b></span>` : "");
+  }
 }
 
 /* ---------- Dexcom CGM ---------- */
@@ -361,6 +435,11 @@ function clean(e){
   if (k === "meal") { o.meal = String(e.meal || "Ēdienreize"); o.items = (Array.isArray(e.items) ? e.items : []).map(i => ({ n: String(i.n||i.name||""), g: num(i.g), oh: num(i.oh) })).filter(i => i.n); o.mv = num(e.mv); o.mv_est = false; }
   if (k === "glucose") o.glucose = num(e.glucose);
   if (k === "tablets") o.count = num(e.count) || 1;
+  if (k === "ketones") o.ketones = num(e.ketones);
+  if (k === "pen") o.insulin = String(e.insulin || "");
+  if (k === "temp") o.temp = num(e.temp);
+  if (k === "med") o.med = String(e.med || e.note || "");
+  if (k !== "ketones" && num(e.ketones) != null) o.ketones = num(e.ketones);
   o.bg = k === "glucose" ? null : num(e.bg);
   o.note = e.note ? String(e.note) : "";
   return withMv(o);
@@ -407,7 +486,7 @@ $("#camFile").onchange = async ev => {
   const f = ev.target.files && ev.target.files[0]; ev.target.value = ""; if (!f) return;
   const btns = document.querySelectorAll(".photobtn"); btns.forEach(x => x.disabled = true);
   const btn = $("#send"); btn.disabled = true;
-  btn.textContent = camMode === "meter" ? "Lasa rādījumu…" : camMode === "notes" ? "Lasa pierakstus…" : "Lasa ēdienkarti…";
+  btn.textContent = camMode === "meter" || camMode === "ketones" ? "Lasa rādījumu…" : camMode === "notes" ? "Lasa pierakstus…" : "Lasa ēdienkarti…";
   try {
     const image = await shrink(f, camMode === "notes" ? 2200 : 1600); if (!image) throw new Error("Attēlu neizdevās atvērt");
     if (camMode === "meter") {
@@ -416,6 +495,11 @@ $("#camFile").onchange = async ev => {
       if ((r.unit && /mg/i.test(r.unit)) || v > 35) v = Math.round(v/18.016*10)/10;
       const time = (r.time && /^\d{1,2}:\d{2}$/.test(r.time) && (!r.date || r.date === cur)) ? r.time.padStart(5,"0") : (cur === todayStr() ? nowTime() : "");
       pending = { list: [{ kind: "glucose", time, glucose: v, bg: null, note: "glikometrs (foto)", src: "meter" }], clearInput: false };
+    } else if (camMode === "ketones") {
+      const r = await callParse({ mode: "ketones", image, mediaType: "image/jpeg" });
+      const v = num(r.ketones); if (v == null) throw new Error(r.error || "Rādījumu neizdevās nolasīt");
+      const time = (r.time && /^\d{1,2}:\d{2}$/.test(r.time) && (!r.date || r.date === cur)) ? r.time.padStart(5,"0") : (cur === todayStr() ? nowTime() : "");
+      pending = { list: [{ kind: "ketones", time, ketones: v, bg: null, note: "ketonu mērītājs (foto)", src: "meter" }], clearInput: false };
     } else if (camMode === "notes") {
       const r = await callParse({ mode: "notes", image, mediaType: "image/jpeg", text: $("#input").value.trim() });
       const list = (r.entries || []).map(clean).filter(Boolean);
@@ -436,6 +520,14 @@ $("#camFile").onchange = async ev => {
 };
 
 /* ---------- preview & edit ---------- */
+// While a sheet is open the diary behind it must not scroll (iOS ignores overflow:hidden alone)
+let lockY = 0;
+new MutationObserver(() => {
+  const open = !!$("#sheetHost").firstElementChild, b = document.body;
+  if (open && !b.classList.contains("locked")) { lockY = window.scrollY; b.style.top = -lockY + "px"; b.classList.add("locked"); }
+  else if (!open && b.classList.contains("locked")) { b.classList.remove("locked"); b.style.top = ""; window.scrollTo(0, lockY); }
+}).observe($("#sheetHost"), { childList: true });
+$("#sheetHost").addEventListener("touchmove", ev => { if (!ev.target.closest(".sheet")) ev.preventDefault(); }, { passive: false });
 function closeSheet(){ $("#sheetHost").innerHTML = ""; }
 function openPreview(){
   const tot = pending.list.reduce((s,e) => s + (e.kind === "meal" ? num(e.mv)||0 : 0), 0);
@@ -455,7 +547,7 @@ function openPreview(){
 }
 function toRow(e){
   return { child_id: child.id, date: e.date || cur, time: e.time || "", kind: e.kind, insulin: e.insulin ?? null, units: e.units ?? null, meal: e.meal ?? null,
-    items: e.items || [], mv: e.mv ?? null, mv_est: !!e.mv_est, glucose: e.glucose ?? null, bg: e.bg ?? null, count: e.count ?? null, note: e.note || null, src: e.src || null };
+    items: e.items || [], mv: e.mv ?? null, mv_est: !!e.mv_est, glucose: e.glucose ?? null, ketones: e.ketones ?? null, temp: e.temp ?? null, med: e.med || null, bg: e.bg ?? null, count: e.count ?? null, note: e.note || null, src: e.src || null };
 }
 async function savePending(){
   const btn = $("#pvSave"); btn.disabled = true; btn.textContent = "Saglabā…";
@@ -479,14 +571,17 @@ function openEdit(e, pendingIdx){
     <div class="grid">
       <label>Laiks<input id="fTime" type="time" value="${esc(e.time||"")}" ${dis}></label>
       <label>Veids<select id="fKind" ${dis}>${Object.keys(KIND).map(x => `<option value="${x}" ${x===k?"selected":""}>${KIND[x]}</option>`).join("")}</select></label>
-      <label data-for="basal bolus">Insulīns<input id="fIns" value="${esc(e.insulin||"")}" placeholder="Lantus / Apidra" ${dis}></label>
+      <label data-for="basal bolus pen">Insulīns<input id="fIns" value="${esc(e.insulin||"")}" placeholder="Lantus / Apidra" ${dis}></label>
       <label data-for="basal bolus">Vienības<input id="fUnits" inputmode="decimal" value="${esc(fmt(e.units))}" ${dis}></label>
       <label data-for="meal">Ēdienreize<input id="fMeal" value="${esc(e.meal||"")}" placeholder="Brokastis" ${dis}></label>
       <label data-for="meal">MV <span id="mvHint"></span><input id="fMv" inputmode="decimal" value="${esc(fmt(e.mv,1))}" placeholder="tukšs = aprēķināt" ${dis}></label>
       <label data-for="meal" class="full">Ēdieni: nosaukums — grami — ogļhidrāti g<textarea id="fItems" rows="5" ${dis}>${esc(itemsTxt)}</textarea></label>
       <label data-for="glucose">Cukurs, mmol/l<input id="fGlu" inputmode="decimal" value="${esc(fmt(e.glucose,1))}" ${dis}></label>
+      <label data-for="ketones glucose bolus basal tablets note">Ketoni, mmol/l<input id="fKet" inputmode="decimal" value="${esc(fmt(e.ketones,1))}" placeholder="nav mērīts" ${dis}></label>
+      <label data-for="temp">Temperatūra, °C<input id="fTemp" inputmode="decimal" value="${esc(fmt(e.temp,1))}" ${dis}></label>
+      <label data-for="med" class="full">Zāles un deva<input id="fMed" value="${esc(e.med||"")}" placeholder="piem. Nurofen 5 ml" ${dis}></label>
       <label data-for="tablets">Tabletes<input id="fCount" inputmode="decimal" value="${esc(fmt(e.count))}" ${dis}></label>
-      <label data-for="basal bolus meal tablets note" class="full">Glikoze tobrīd, mmol/l<input id="fBg" inputmode="decimal" value="${esc(fmt(e.bg,1))}" placeholder="nav mērīts" ${dis}></label>
+      <label data-for="basal bolus meal tablets ketones note" class="full">Glikoze tobrīd, mmol/l<input id="fBg" inputmode="decimal" value="${esc(fmt(e.bg,1))}" placeholder="nav mērīts" ${dis}></label>
       <label class="full">Piezīme<input id="fNote" value="${esc(e.note||"")}" ${dis}></label>
     </div>
     <div class="rowbtns">
@@ -507,8 +602,13 @@ function openEdit(e, pendingIdx){
   q("#fSave").onclick = async () => {
     const kk = q("#fKind").value;
     const o = { kind: kk, time: q("#fTime").value || "", note: q("#fNote").value.trim(), bg: kk === "glucose" ? null : num(q("#fBg").value),
-      insulin: null, units: null, meal: null, items: [], mv: null, mv_est: false, glucose: null, count: null, src: e.src || null };
+      insulin: null, units: null, meal: null, items: [], mv: null, mv_est: false, glucose: null, ketones: null, temp: null, med: null, count: null, src: e.src || null };
+    if (["glucose","bolus","basal","tablets","note"].includes(kk)) o.ketones = num(q("#fKet").value);
+    if (kk === "temp") { o.temp = num(q("#fTemp").value); if (o.temp == null || o.temp < 34 || o.temp > 43) { toast("Ievadi temperatūru no 34 līdz 43 °C"); return; } }
+    if (kk === "med") { o.med = q("#fMed").value.trim(); if (!o.med) { toast("Ieraksti zāļu nosaukumu un devu"); return; } }
     if (kk === "basal" || kk === "bolus") { o.insulin = q("#fIns").value.trim(); o.units = num(q("#fUnits").value); }
+    if (kk === "pen") o.insulin = q("#fIns").value.trim();
+    if (kk === "ketones") { o.ketones = num(q("#fKet").value); if (o.ketones == null) { toast("Ievadi ketonu rādījumu"); return; } }
     if (kk === "meal") {
       o.meal = q("#fMeal").value.trim(); o.items = parseItems();
       const typed = num(q("#fMv").value);
@@ -534,6 +634,72 @@ function openEdit(e, pendingIdx){
   };
 }
 
+/* ---------- insulin pens: days since a new pen was opened ---------- */
+const DEF_INS = ["Apidra", "Lantus"];
+let pens = [];
+function dayDiff(a, b){ const [y1,m1,d1] = a.split("-").map(Number), [y2,m2,d2] = b.split("-").map(Number); return Math.round((Date.UTC(y2,m2-1,d2) - Date.UTC(y1,m1-1,d1)) / 864e5); }
+async function loadPens(){
+  const want = child.id, today = todayStr();
+  const { data, error } = await sb.from("entries").select("kind,insulin,date,time,units,created_at").eq("child_id", want)
+    .in("kind", ["pen","basal","bolus"]).gte("date", shift(today, -90)).limit(3000);
+  if (error || !child || child.id !== want) return;
+  const rows = (data || []).slice();
+  rows.sort((a,b) => a.date.localeCompare(b.date) || (a.time||"").localeCompare(b.time||""));
+  const by = {}, order = [];
+  const key = n => String(n||"").trim().toLowerCase();
+  rows.forEach(r => { const k = key(r.insulin); if (!k) return; if (!by[k]) { by[k] = { name: String(r.insulin).trim(), last: null, used: 0, doses: false }; order.push(k); } });
+  rows.forEach(r => {
+    const p = by[key(r.insulin)]; if (!p) return;
+    if (r.kind === "pen") { p.last = r; p.used = 0; }
+    else { p.doses = true; if (p.last) p.used += num(r.units) || 0; }
+  });
+  pens = order.map(k => by[k]).filter(p => p.last || p.doses);
+  pens.sort((a,b) => (b.last ? 1 : 0) - (a.last ? 1 : 0));
+  renderPens();
+}
+function renderPens(){
+  const box = $("#penCard"); const today = todayStr();
+  if (!pens.length) { box.hidden = true; return; }
+  box.hidden = false;
+  box.innerHTML = `<div class="penhead"><b>Insulīna ampulas</b><button class="btn small" id="penNew" type="button">Jauna ampula</button></div>` + pens.map(p => {
+    if (!p.last) return `<div class="penline"><span class="pn">${esc(p.name)}</span><span class="pd muted">maiņa nav atzīmēta</span></div>`;
+    const d = dayDiff(p.last.date, today), left = penDays - d;
+    const cls = left <= 0 ? "over" : left <= 3 ? "soon" : "";
+    const when = left <= 0 ? (left === 0 ? "jāmaina šodien" : `termiņš beidzās pirms ${-left} d.`) : `vēl ${left} d.`;
+    return `<div class="penline ${cls}"><span class="pn">${esc(p.name)}</span><span class="pd"><b>${d + 1}.</b> diena no ${penDays} · ${when}${p.used ? ` · izlietots ${fmt(p.used,1)} v` : ""}</span></div>`;
+  }).join("");
+  $("#penNew").onclick = openPenSheet;
+}
+function openPenSheet(){
+  const names = Array.from(new Set(pens.map(p => p.name).concat(DEF_INS))); const today = todayStr();
+  const wrap = document.createElement("div"); wrap.className = "sheet-bg";
+  wrap.innerHTML = `<div class="sheet" role="dialog" aria-label="Jauna insulīna ampula">
+    <h2>Atvērta jauna ampula</h2>
+    <div class="chips" id="pnIns">${names.map((n,i) => `<button type="button" class="pchip" aria-pressed="${i===0}" data-n="${esc(n)}">${esc(n)}</button>`).join("")}</div>
+    <div class="grid">
+      <label>Datums<input id="pnDate" type="date" value="${today}" max="${today}"></label>
+      <label>Laiks<input id="pnTime" type="time" value="${nowTime()}"></label>
+      <label class="full">Iemesls<select id="pnWhy"><option>Beidzās lietošanas termiņš</option><option>Ampula tukša</option><option>Cits iemesls</option></select></label>
+      <label class="full">Piezīme<input id="pnNote" placeholder="nav obligāti"></label>
+    </div>
+    <p class="hint">Skaitītājs rēķina ${penDays} dienas no atvēršanas — to var mainīt sadaļā Ģimene → Iestatījumi.</p>
+    <div class="rowbtns"><button class="btn" id="pnCancel" type="button">Atcelt</button><button class="btn primary" id="pnSave" type="button">Saglabāt</button></div>
+  </div>`;
+  $("#sheetHost").innerHTML = ""; $("#sheetHost").appendChild(wrap);
+  const q = s => wrap.querySelector(s);
+  let ins = names[0];
+  wrap.querySelectorAll("#pnIns .pchip").forEach(b => b.onclick = () => { ins = b.dataset.n; wrap.querySelectorAll("#pnIns .pchip").forEach(x => x.setAttribute("aria-pressed", x === b)); });
+  q("#pnCancel").onclick = closeSheet;
+  q("#pnSave").onclick = async () => {
+    const date = q("#pnDate").value || today; const extra = q("#pnNote").value.trim();
+    const row = toRow({ kind: "pen", date, time: q("#pnTime").value || "", insulin: ins, note: q("#pnWhy").value + (extra ? "; " + extra : "") });
+    q("#pnSave").disabled = true;
+    const { error } = await sb.from("entries").insert(row);
+    if (error) { q("#pnSave").disabled = false; toast("Neizdevās saglabāt: " + error.message); return; }
+    closeSheet(); toast("Saglabāts"); if (date === cur) loadDay(true); else loadPens();
+  };
+}
+
 /* ---------- copy ---------- */
 function entryText(e){
   let s = "";
@@ -541,8 +707,13 @@ function entryText(e){
   else if (e.kind === "meal") s = `${e.meal}${e.mv!=null ? " ("+(e.mv_est?"≈":"")+fmt(e.mv,1)+" MV)" : ""}: ` + (e.items||[]).map(i => i.n + (i.g!=null ? " "+fmt(i.g,0)+"g" : "")).join(", ");
   else if (e.kind === "glucose") s = `Cukurs ${fmt(e.glucose,1)} mmol/l`;
   else if (e.kind === "tablets") s = `${fmt(e.count)} glikozes tab.`;
+  else if (e.kind === "ketones") s = `Ketoni ${fmt(e.ketones,1)} mmol/l`;
+  else if (e.kind === "pen") s = `Jauna insulīna ampula${e.insulin ? ": " + e.insulin : ""}`;
+  else if (e.kind === "temp") s = `Temperatūra ${fmt(e.temp,1)} °C`;
+  else if (e.kind === "med") s = `Zāles: ${e.med || ""}`;
   else s = e.note || "";
   if (e.kind !== "glucose" && e.bg != null) s += ` [cukurs ${fmt(e.bg,1)}]`;
+  if (e.kind !== "ketones" && e.ketones != null) s += ` [ketoni ${fmt(e.ketones,1)}]`;
   if (e.note && e.kind !== "note") s += ` — ${e.note}`;
   return s;
 }
@@ -613,6 +784,8 @@ function periodStats(){
     perMv: sumMvI > 0 ? sumBol/sumMvI : null, isf: tdd ? 100/tdd : null, isfEv: isfEvents(), cr: tdd ? 500/tdd : null,
     basPct: tdd ? avg("bas")/tdd*100 : null, tab: per.reduce((s,p) => s + p.tab, 0),
     cgm: cgmStats(Object.values(pCgm)),
+    ketMax: per.reduce((m,p) => p.ketMax != null && (m == null || p.ketMax > m) ? p.ketMax : m, null),
+    sickDays: per.filter(p => (p.ketMax != null && p.ketMax >= 0.6) || (p.tempMax != null && p.tempMax >= 38)).length,
     gAvg: gAll.length ? gAll.reduce((a,b) => a+b, 0)/gAll.length : null, gN: gAll.length };
 }
 function renderStats(){
@@ -623,6 +796,7 @@ function renderStats(){
     st(fmt(S.bas,1)+(S.bas!=null?" v":""), "Vid. ilgais (bazālais)", S.basPct!=null ? fmt(S.basPct,0)+"% no kopējās" : "") +
     st(fmt(S.bol,1)+(S.bol!=null?" v":""), "Vid. īsais dienā", "") +
     st(S.mv!=null ? fmt(S.mv,1)+" MV" : "", "Vid. MV dienā", "") +
+    (showCalcs ?
     st(S.perMv!=null ? fmt(S.perMv,2)+" v" : "", "Īsais uz 1 MV", "tik vienību Apidra vidēji iedots uz 1 MV (ar korekcijām)", true) +
     (() => { const m = median(S.isfEv.map(x => x.isf)); const n = S.isfEv.length;
       return st(S.isf!=null ? fmt(S.isf,1)+" mmol/l" : "", "Jutība uz 1 v",
@@ -630,12 +804,13 @@ function renderStats(){
         (m != null ? ` · pēc ${n} ${n === 1 ? "korekcijas" : "korekcijām"} bez ēdiena: ${fmt(m,1)} mmol/l` + (n < 3 ? " (vēl maz datu)" : "") : " · no korekcijām vēl nav datu"), true); })() +
     st(S.perMv ? fmt(gPerMv/S.perMv,0)+" g" : "", "OH uz 1 v", S.perMv ? "cik g ogļhidrātu vidēji nosegusi 1 v Apidra (≈ " + fmt(1/S.perMv,1) + " MV) · pēc Jūsu ierakstiem, ar korekcijām" : "") +
     (() => { const m = median(S.isfEv.map(x => x.isf)); const isfUse = S.isf != null ? S.isf : m; const g = S.perMv && isfUse ? (gPerMv/S.perMv) / isfUse : null; const gReal = S.perMv && m ? (gPerMv/S.perMv) / m : null; return st(g != null ? fmt(g,1)+" g" : "—", "Glikoze uz +1 mmol/l",
-      g != null ? "cik g tīras glikozes paaugstina cukuru par 1 mmol/l" + (tabletG ? ` (≈ ${fmt(g/tabletG,1)} tabl. pa ${fmt(tabletG,1)} g)` : "") + " · OH uz 1 v ÷ jutība" + (gReal != null && Math.abs(gReal - g) >= 0.1 ? ` · pēc korekcijām: ${fmt(gReal,1)} g` : "") : "cik g tīras glikozes paaugstina cukuru par 1 mmol/l · vajag MV un insulīna ierakstus"); })() +
+      g != null ? "cik g tīras glikozes paaugstina cukuru par 1 mmol/l" + (tabletG ? ` (≈ ${fmt(g/tabletG,1)} tabl. pa ${fmt(tabletG,1)} g)` : "") + " · OH uz 1 v ÷ jutība" + (gReal != null && Math.abs(gReal - g) >= 0.1 ? ` · pēc korekcijām: ${fmt(gReal,1)} g` : "") : "cik g tīras glikozes paaugstina cukuru par 1 mmol/l · vajag MV un insulīna ierakstus"); })() : "") +
+    (S.ketMax != null ? st(fmt(S.ketMax,1)+" mmol/l", "Ketoni max", S.sickDays ? S.sickDays + " slimības dienas" : "") : "") +
     st(S.gAvg!=null ? fmt(S.gAvg,1)+" mmol/l" : "", "Vid. cukurs no pirksta", S.gN ? S.gN+" mērījumi" : "Nav mērījumu") +
     (S.cgm ? st(fmt(S.cgm.tir,0)+"%", "Dexcom: laiks diapazonā", "3,9–10 mmol/l", true) + st(fmt(S.cgm.avg,1)+" mmol/l", "Dexcom vidējais", `zem 3,9: ${fmt(S.cgm.lo,0)}% · virs 10: ${fmt(S.cgm.hi,0)}%`)
            : st("", "Dexcom dati", "nav importēti šim periodam"));
-  const rows = S.per.map(p => `<tr><td><button type="button" data-d="${p.date}">${shortDate(p.date)}</button></td><td>${fmt(p.bas)}</td><td>${fmt(p.bol)}</td><td>${fmt(p.tdd)}</td><td>${fmt(p.mv,1)}</td><td>${p.mv>0&&p.bol>0?fmt(p.bol/p.mv,2):""}</td><td>${fmt(p.tab)}</td><td>${p.cgm?fmt(p.cgm.tir,0)+"%":""}</td></tr>`).join("");
-  $("#dayTable").innerHTML = `<thead><tr><th>Diena</th><th>Ilgais v</th><th>Īsais v</th><th>Kopā v</th><th>MV</th><th>v/MV</th><th>Tab.</th><th>Diap.</th></tr></thead><tbody>${rows || `<tr><td colspan="8">Šajā periodā nav ierakstu</td></tr>`}</tbody>`;
+  const rows = S.per.map(p => `<tr><td><button type="button" data-d="${p.date}">${shortDate(p.date)}</button></td><td>${fmt(p.bas)}</td><td>${fmt(p.bol)}</td><td>${fmt(p.tdd)}</td><td>${fmt(p.mv,1)}</td>${showCalcs ? `<td>${p.mv>0&&p.bol>0?fmt(p.bol/p.mv,2):""}</td>` : ""}<td>${fmt(p.tab)}</td><td>${p.ketMax!=null?fmt(p.ketMax,1):""}</td><td>${p.cgm?fmt(p.cgm.tir,0)+"%":""}</td></tr>`).join("");
+  $("#dayTable").innerHTML = `<thead><tr><th>Diena</th><th>Ilgais v</th><th>Īsais v</th><th>Kopā v</th><th>MV</th>${showCalcs ? "<th>v/MV</th>" : ""}<th>Tab.</th><th>Ket.</th><th>Diap.</th></tr></thead><tbody>${rows || `<tr><td colspan="9">Šajā periodā nav ierakstu</td></tr>`}</tbody>`;
   $("#dayTable").querySelectorAll("button[data-d]").forEach(b => b.onclick = () => { cur = b.dataset.d; setView("day"); loadDay(); });
 }
 
@@ -648,19 +823,19 @@ function printHTML(from, to, byDay, cgm){
     const chart = cs ? `<div class="chart">${cgmSvg(cgm[d], fingerMarks(list), PAL_PRINT)}<div class="cs">Dexcom: vid. ${fmt(cs.avg,1)} mmol/l · diapazonā ${fmt(cs.tir,0)}% · zem 3,9 ${fmt(cs.lo,0)}% · virs 10 ${fmt(cs.hi,0)}% · min ${fmt(cs.min,1)} / max ${fmt(cs.max,1)}</div></div>` : "";
     const rows = list.map(e => {
       const what = e.kind === "meal" ? `<b>${esc(e.meal)}</b><br>` + (e.items||[]).map(i => `${esc(i.n)}${i.g!=null ? ` <span class="g">${fmt(i.g,0)} g</span>` : ""}`).join("<br>")
-        : esc(entryText(e).replace(/ — .*$/,"").replace(/ \[cukurs [^\]]*\]/,""));
-      const gl = e.kind === "glucose" ? fmt(e.glucose,1) : (e.bg != null ? "<b>"+fmt(e.bg,1)+"</b>" : "");
+        : esc(entryText(e).replace(/ — .*$/,"").replace(/ \[(cukurs|ketoni) [^\]]*\]/g,""));
+      const gl = (e.kind === "glucose" ? fmt(e.glucose,1) : (e.bg != null ? "<b>"+fmt(e.bg,1)+"</b>" : "")) + (e.ketones != null ? `<br><span class="g">ket. ${fmt(e.ketones,1)}</span>` : "");
       return `<tr><td class="t">${esc(e.time||"")}</td><td>${what}${e.note ? `<div class="n">${esc(e.note)}</div>` : ""}</td><td class="r">${e.kind==="meal"&&e.mv!=null ? (e.mv_est?"≈":"")+fmt(e.mv,1) : ""}</td><td class="r">${e.kind==="bolus" ? fmt(e.units) : ""}</td><td class="r">${e.kind==="basal" ? fmt(e.units) : ""}</td><td class="r">${gl}${e.kind==="tablets" ? (gl?"<br>":"")+fmt(e.count)+" tab." : ""}</td></tr>`;
     }).join("");
     return `<section class="pday"><h2><span class="num">${Number(d.slice(8))}</span>${esc(prettyDate(d))}</h2>${chart}
-      ${list.length ? `<table><thead><tr><th>Laiks</th><th>Ieraksts</th><th>MV</th><th>Īsais v</th><th>Ilgais v</th><th>Cukurs mmol/l / tab.</th></tr></thead><tbody>${rows}</tbody>
+      ${list.length ? `<table><thead><tr><th>Laiks</th><th>Ieraksts</th><th>MV</th><th>Īsais v</th><th>Ilgais v</th><th>Cukurs mmol/l / ketoni</th></tr></thead><tbody>${rows}</tbody>
       <tfoot><tr><td></td><td>Kopā</td><td class="r">${fmt(t.mv,1)}</td><td class="r">${fmt(t.bol)}</td><td class="r">${fmt(t.bas)}</td><td class="r">${t.tab ? fmt(t.tab)+" tab." : ""}</td></tr></tfoot></table>
-      <div class="sum">Kopējā deva: <b>${fmt(t.tdd)} v</b>${t.mv>0&&t.bol>0 ? ` · īsais uz 1 MV: <b>${fmt(t.bol/t.mv,2)} v</b>` : ""}</div>` : ""}</section>`;
+      <div class="sum">Kopējā deva: <b>${fmt(t.tdd)} v</b>${showCalcs && t.mv>0&&t.bol>0 ? ` · īsais uz 1 MV: <b>${fmt(t.bol/t.mv,2)} v</b>` : ""}${t.ketMax != null ? ` · ketoni max <b>${fmt(t.ketMax,1)}</b>` : ""}${t.tempMax != null ? ` · temperatūra max <b>${fmt(t.tempMax,1)} °C</b>` : ""}</div>` : ""}</section>`;
   }).join("");
   const box = (v,l) => `<div><b>${v || "—"}</b><span>${l}</span></div>`;
   return `<div class="pr"><h1>${esc(child.name)} · Cukuriņa pieraksti</h1><div class="sub">${from === to ? esc(prettyDate(from)) : esc(prettyDate(from)) + " – " + esc(prettyDate(to))}</div>
-    ${from === to ? "" : `<div class="pstats">${box(S.tdd!=null?fmt(S.tdd,1)+" v":"", "Vid. kopējā deva dienā")}${box(S.bas!=null?fmt(S.bas,1)+" v":"", "Vid. ilgais")}${box(S.bol!=null?fmt(S.bol,1)+" v":"", "Vid. īsais")}${box(S.mv!=null?fmt(S.mv,1)+" MV":"", "Vid. MV dienā")}${box(S.perMv!=null?fmt(S.perMv,2)+" v":"", "Īsais uz 1 MV")}${(() => { const m = median(S.isfEv.map(x => x.isf)); return box(S.isf!=null?fmt(S.isf,1)+" mmol/l":"", "Jutība uz 1 v (100 ÷ dienas deva)" + (m!=null ? "; pēc korekcijām " + fmt(m,1) : "")); })()}${box(S.cgm?fmt(S.cgm.tir,0)+"%":"", "Dexcom diapazonā 3,9–10")}${box(S.cgm?fmt(S.cgm.avg,1)+" mmol/l":(S.gAvg!=null?fmt(S.gAvg,1)+" mmol/l":""), S.cgm ? "Dexcom vidējais" : "Vid. cukurs no pirksta")}</div>`}
-    <div class="pdisc">Aprēķini ir aptuveni un domāti sarunai ar endokrinologu. 1 MV = ${fmt(gPerMv)} g ogļhidrātu. “≈” — MV aprēķinātas no ēdienu sastāva.</div>
+    ${from === to ? "" : `<div class="pstats">${box(S.tdd!=null?fmt(S.tdd,1)+" v":"", "Vid. kopējā deva dienā")}${box(S.bas!=null?fmt(S.bas,1)+" v":"", "Vid. ilgais")}${box(S.bol!=null?fmt(S.bol,1)+" v":"", "Vid. īsais")}${box(S.mv!=null?fmt(S.mv,1)+" MV":"", "Vid. MV dienā")}${showCalcs ? box(S.perMv!=null?fmt(S.perMv,2)+" v":"", "Īsais uz 1 MV") + (() => { const m = median(S.isfEv.map(x => x.isf)); return box(S.isf!=null?fmt(S.isf,1)+" mmol/l":"", "Jutība uz 1 v (100 ÷ dienas deva)" + (m!=null ? "; pēc korekcijām " + fmt(m,1) : "")); })() : box(S.ketMax!=null?fmt(S.ketMax,1)+" mmol/l":"", "Ketoni max") + box(S.gAvg!=null?fmt(S.gAvg,1)+" mmol/l":"", "Vid. cukurs no pirksta")}${box(S.cgm?fmt(S.cgm.tir,0)+"%":"", "Dexcom diapazonā 3,9–10")}${box(S.cgm?fmt(S.cgm.avg,1)+" mmol/l":(S.gAvg!=null?fmt(S.gAvg,1)+" mmol/l":""), S.cgm ? "Dexcom vidējais" : "Vid. cukurs no pirksta")}</div>`}
+    <div class="pdisc">${showCalcs ? "Aprēķini ir aptuveni un domāti sarunai ar endokrinologu. " : ""}1 MV = ${fmt(gPerMv)} g ogļhidrātu. “≈” — MV aprēķinātas no ēdienu sastāva.</div>
     ${dayHTML || "<p>Šajā periodā nav ierakstu.</p>"}</div>`;
 }
 function doPrint(html){
@@ -671,10 +846,10 @@ window.addEventListener("afterprint", () => { $("#printArea").innerHTML = ""; })
 $("#printPeriod").onclick = () => doPrint(printHTML(period.from, period.to, pByDay, pCgm));
 $("#dlCsv").onclick = () => {
   const q = v => { const s = String(v ?? ""); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s; };
-  const L = [["Datums","Laiks","Veids","Insulīns","Vienības","Ēdienreize","Ēdieni","MV","MV aprēķinātas","Cukurs mmol/l","Glik. tabletes","Piezīme","Pievienoja"].join(";")];
+  const L = [["Datums","Laiks","Veids","Insulīns","Vienības","Ēdienreize","Ēdieni","MV","MV aprēķinātas","Cukurs mmol/l","Ketoni mmol/l","Glik. tabletes","Temperatūra °C","Zāles","Piezīme","Pievienoja"].join(";")];
   Object.keys(pByDay).sort().forEach(d => sortE(pByDay[d]).forEach(e => {
     L.push([d, e.time, KIND[e.kind]||e.kind, e.insulin||"", fmt(e.units), e.meal||"", (e.items||[]).map(i => i.n + (i.g!=null?" "+fmt(i.g,0)+"g":"") + (i.oh!=null?" ("+fmt(i.oh,0)+"g OH)":"")).join(", "),
-      fmt(e.mv,1), e.mv_est?"jā":"", fmt(e.kind==="glucose"?e.glucose:e.bg,1), e.kind==="tablets"?fmt(e.count):"", e.note||"", (members[e.created_by]||{}).display_name||""].map(q).join(";"));
+      fmt(e.mv,1), e.mv_est?"jā":"", fmt(e.kind==="glucose"?e.glucose:e.bg,1), fmt(e.ketones,1), e.kind==="tablets"?fmt(e.count):"", fmt(e.temp,1), e.med||"", e.note||"", (members[e.created_by]||{}).display_name||""].map(q).join(";"));
   }));
   const blob = new Blob(["﻿" + L.join("\r\n")], { type: "text/csv;charset=utf-8" });
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `${child.name}_${period.from}_${period.to}.csv`;
@@ -688,6 +863,9 @@ async function renderFamily(){
   const me = members[user.id] || {};
   $("#myName").value = me.display_name || "";
   $("#gPerMv").value = fmt(gPerMv); $("#gPerMv").disabled = role !== "owner";
+  $("#penDays").value = penDays; $("#penDays").disabled = role !== "owner";
+  $("#showCalcs").checked = showCalcs; $("#showCalcs").disabled = role !== "owner";
+  $("#adminCard").hidden = !isAdmin; if (isAdmin) renderAdmin();
   $("#tabletG").value = tabletG != null ? fmt(tabletG,1) : ""; $("#tabletG").disabled = role !== "owner";
   const ml = $("#memberList"); ml.innerHTML = "";
   Object.values(members).sort((a,b) => ["owner","family","caregiver"].indexOf(a.role) - ["owner","family","caregiver"].indexOf(b.role)).forEach(m => {
@@ -738,15 +916,41 @@ $("#saveSettings").onclick = async () => {
   if (role === "owner") {
     const v = num($("#gPerMv").value);
     if (!v || v < 5 || v > 20) { toast("1 MV jābūt no 5 līdz 20 g"); return; }
+    const pd = Math.round(num($("#penDays").value) || 0);
+    if (pd < 3 || pd > 60) { toast("Ampulas lietošanas dienām jābūt no 3 līdz 60"); return; }
+    const sc = $("#showCalcs").checked;
     const tg = num($("#tabletG").value);
     if (tg != null && (tg <= 0 || tg > 20)) { toast("Tabletes svaram jābūt no 0,1 līdz 20 g"); return; }
-    const { error } = await sb.from("children").update({ g_per_mv: v, tablet_g: tg }).eq("id", child.id);
-    if (!error) { gPerMv = v; tabletG = tg; }
+    const { error } = await sb.from("children").update({ g_per_mv: v, pen_days: pd, show_calcs: sc, tablet_g: tg }).eq("id", child.id);
+    if (!error) { gPerMv = v; penDays = pd; showCalcs = sc; tabletG = tg; }
   }
   await loadMemberships(); const m = memberships.find(x => x.child_id === child.id);
   $("#roleLabel").textContent = (m && m.display_name ? m.display_name + " · " : "") + ROLE[role];
   toast("Saglabāts"); renderFamily();
 };
+$("#changePass").onclick = () => openPassSheet(false);
+async function renderAdmin(){
+  const box = $("#adminList");
+  const { data, error } = await sb.rpc("admin_families");
+  if (error) { box.innerHTML = `<li><span class="pn">Neizdevās ielādēt</span></li>`; return; }
+  box.innerHTML = "";
+  (data || []).forEach(f => {
+    const li = document.createElement("li");
+    const last = f.last_entry ? shortDate(String(f.last_entry).slice(0,10)) : "—";
+    li.innerHTML = `<div class="pn"><b>${esc(f.child_name)}</b><span>${esc(f.owner_name || "")}${f.owner_email ? " · " + esc(f.owner_email) : ""}<br>${f.members} cilv. · ${f.entries} ieraksti · pēdējais ${last} · atpazīšana 30 d.: ${f.ai_calls_30d}</span></div>`;
+    const lab = document.createElement("label"); lab.className = "switch";
+    lab.innerHTML = `<input type="checkbox" ${f.ai_enabled ? "checked" : ""}>Atpazīšana`;
+    lab.querySelector("input").onchange = async ev => {
+      const on = ev.target.checked; ev.target.disabled = true;
+      const r = await sb.rpc("admin_set_ai", { p_child: f.child_id, p_on: on });
+      ev.target.disabled = false;
+      if (r.error) { ev.target.checked = !on; toast("Neizdevās"); return; }
+      toast(on ? "Atpazīšana ieslēgta" : "Atpazīšana izslēgta");
+      if (child && f.child_id === child.id) { await loadMemberships(); selectChild(child.id); }
+    };
+    li.appendChild(lab); box.appendChild(li);
+  });
+}
 $("#signOut").onclick = async () => { if (channel) sb.removeChannel(channel); await sb.auth.signOut(); };
 
 
@@ -1016,6 +1220,16 @@ $("#mic").onclick = () => { if (recorder && recorder.state === "recording") stop
 /* ---------- input grows with text, starts at button height ---------- */
 function fitInput(){ const t = $("#input"); t.style.height = "50px"; if (t.scrollHeight > 52) t.style.height = Math.min(t.scrollHeight + 2, 150) + "px"; }
 $("#input").addEventListener("input", fitInput);
+// While typing: only the input row stays visible, pinned right above the keyboard
+let typingOff = null;
+function placeDock(){
+  const vv = window.visualViewport; if (!vv || !document.body.classList.contains("typing")) { $("#dock").style.bottom = ""; return; }
+  const gap = document.documentElement.clientHeight - (vv.height + vv.offsetTop);
+  $("#dock").style.bottom = Math.max(0, Math.round(gap)) + "px";
+}
+$("#input").addEventListener("focus", () => { clearTimeout(typingOff); document.body.classList.add("typing"); placeDock(); });
+$("#input").addEventListener("blur", () => { typingOff = setTimeout(() => { document.body.classList.remove("typing"); placeDock(); }, 250); });
+if (window.visualViewport) { visualViewport.addEventListener("resize", placeDock); visualViewport.addEventListener("scroll", placeDock); }
 const _desc = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value");
 Object.defineProperty($("#input"), "value", { get(){ return _desc.get.call(this); }, set(v){ _desc.set.call(this, v); fitInput(); } });
 
