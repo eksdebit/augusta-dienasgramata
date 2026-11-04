@@ -258,7 +258,7 @@ async function loadDay(quiet){
   if (e.error) { $("#log").innerHTML = `<div class="empty"><strong>Neizdevās ielādēt</strong>${esc(e.error.message)}</div>`; return; }
   entries = e.data || [];
   cgmDay = c.data ? { t: c.data.t.map(Number), v: c.data.v.map(Number) } : null;
-  renderLog(); renderCgm(); loadPens();
+  renderLog(); renderCgm();
 }
 $("#prev").onclick = () => { cur = shift(cur,-1); loadDay(); };
 $("#next").onclick = () => { cur = shift(cur,1); loadDay(); };
@@ -318,16 +318,6 @@ function renderLog(){
   }
   const t = dayTotals(list);
   $("#tBasal").textContent = fmt(t.bas); $("#tBolus").textContent = fmt(t.bol); $("#tMv").textContent = fmt(t.mv,1); $("#tTab").textContent = fmt(t.tab);
-  const sk = $("#sickStrip");
-  if (t.ketMax == null && t.tempMax == null && !t.meds) { sk.hidden = true; sk.innerHTML = ""; }
-  else {
-    const L = ketLevel(t.ketMax);
-    sk.hidden = false;
-    sk.innerHTML = `<span class="lab">Slimības diena</span>` +
-      (t.ketMax != null ? `<span>Ketoni max <b>${fmt(t.ketMax,1)}</b>${L ? ` <span class="klev ${L[1]}">${L[0]}</span>` : ""}</span>` : "") +
-      (t.tempMax != null ? `<span>Temperatūra max <b>${fmt(t.tempMax,1)} °C</b></span>` : "") +
-      (t.meds ? `<span>Zāles <b>${t.meds}×</b></span>` : "");
-  }
 }
 
 /* ---------- Dexcom CGM ---------- */
@@ -696,7 +686,7 @@ function openPenSheet(){
     q("#pnSave").disabled = true;
     const { error } = await sb.from("entries").insert(row);
     if (error) { q("#pnSave").disabled = false; toast("Neizdevās saglabāt: " + error.message); return; }
-    closeSheet(); toast("Saglabāts"); if (date === cur) loadDay(true); else loadPens();
+    closeSheet(); toast("Saglabāts"); loadPens(); if (date === cur) loadDay(true);
   };
 }
 
@@ -785,6 +775,8 @@ function periodStats(){
     basPct: tdd ? avg("bas")/tdd*100 : null, tab: per.reduce((s,p) => s + p.tab, 0),
     cgm: cgmStats(Object.values(pCgm)),
     ketMax: per.reduce((m,p) => p.ketMax != null && (m == null || p.ketMax > m) ? p.ketMax : m, null),
+    tempMax: per.reduce((m,p) => p.tempMax != null && (m == null || p.tempMax > m) ? p.tempMax : m, null),
+    meds: per.reduce((s,p) => s + (p.meds||0), 0),
     sickDays: per.filter(p => (p.ketMax != null && p.ketMax >= 0.6) || (p.tempMax != null && p.tempMax >= 38)).length,
     gAvg: gAll.length ? gAll.reduce((a,b) => a+b, 0)/gAll.length : null, gN: gAll.length };
 }
@@ -806,6 +798,7 @@ function renderStats(){
     (() => { const m = median(S.isfEv.map(x => x.isf)); const isfUse = S.isf != null ? S.isf : m; const g = S.perMv && isfUse ? (gPerMv/S.perMv) / isfUse : null; const gReal = S.perMv && m ? (gPerMv/S.perMv) / m : null; return st(g != null ? fmt(g,1)+" g" : "—", "Glikoze uz +1 mmol/l",
       g != null ? "cik g tīras glikozes paaugstina cukuru par 1 mmol/l" + (tabletG ? ` (≈ ${fmt(g/tabletG,1)} tabl. pa ${fmt(tabletG,1)} g)` : "") + " · OH uz 1 v ÷ jutība" + (gReal != null && Math.abs(gReal - g) >= 0.1 ? ` · pēc korekcijām: ${fmt(gReal,1)} g` : "") : "cik g tīras glikozes paaugstina cukuru par 1 mmol/l · vajag MV un insulīna ierakstus"); })() : "") +
     (S.ketMax != null ? st(fmt(S.ketMax,1)+" mmol/l", "Ketoni max", S.sickDays ? S.sickDays + " slimības dienas" : "") : "") +
+    (S.tempMax != null ? st(fmt(S.tempMax,1)+" °C", "Temperatūra max", S.meds ? "zāles dotas " + S.meds + "×" : "") : "") +
     st(S.gAvg!=null ? fmt(S.gAvg,1)+" mmol/l" : "", "Vid. cukurs no pirksta", S.gN ? S.gN+" mērījumi" : "Nav mērījumu") +
     (S.cgm ? st(fmt(S.cgm.tir,0)+"%", "Dexcom: laiks diapazonā", "3,9–10 mmol/l", true) + st(fmt(S.cgm.avg,1)+" mmol/l", "Dexcom vidējais", `zem 3,9: ${fmt(S.cgm.lo,0)}% · virs 10: ${fmt(S.cgm.hi,0)}%`)
            : st("", "Dexcom dati", "nav importēti šim periodam"));
@@ -1163,7 +1156,7 @@ function setView(v){
   $("#dock").hidden = v !== "day"; document.body.classList.toggle("nodock", v !== "day");
   document.querySelectorAll(".tabbar button").forEach(b => { if (b.dataset.v === v) b.setAttribute("aria-current","page"); else b.removeAttribute("aria-current"); });
   window.scrollTo(0,0);
-  if (v === "stats") loadPeriod();
+  if (v === "stats") { loadPeriod(); loadPens(); }
   if (v === "family") renderFamily();
   if (v === "recipes") loadRecipes();
 }
