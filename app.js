@@ -13,7 +13,7 @@ const ROLE = { owner:"Īpašniece", family:"Ģimene", caregiver:"Aprūpētājs" 
 const LO = 3.9, HI = 10;
 
 let booted = false;
-let user = null, memberships = [], child = null, role = null, members = {}, gPerMv = 12;
+let user = null, memberships = [], child = null, role = null, members = {}, gPerMv = 12, tabletG = null;
 let cur = todayStr(), entries = [], cgmDay = null, channel = null, view = "day";
 let period = { from: shift(todayStr(), -6), to: todayStr() }, pEntries = [], pByDay = {}, pCgm = {};
 
@@ -121,7 +121,7 @@ function myDefaultName(){
 }
 
 async function loadMemberships(){
-  const { data, error } = await sb.from("members").select("child_id, role, display_name, children(name, g_per_mv, ai_enabled)").eq("user_id", user.id);
+  const { data, error } = await sb.from("members").select("child_id, role, display_name, children(name, g_per_mv, ai_enabled, tablet_g)").eq("user_id", user.id);
   memberships = error ? [] : (data || []);
 }
 
@@ -149,7 +149,7 @@ async function selectChild(id){
   const m = memberships.find(x => x.child_id === id);
   child = { id, name: m.children.name, ai: !!m.children.ai_enabled };
   $("#photoRow").hidden = !child.ai;
-  $("#hint").hidden = true; $("#mic").hidden = true; role = m.role; gPerMv = num(m.children.g_per_mv) || 12;
+  $("#hint").hidden = true; $("#mic").hidden = true; role = m.role; gPerMv = num(m.children.g_per_mv) || 12; tabletG = num(m.children.tablet_g);
   try { localStorage.setItem("child", id); } catch (_) {}
   $("#childName").textContent = child.name;
   $("#roleLabel").textContent = (m.display_name ? m.display_name + " · " : "") + ROLE[role];
@@ -630,7 +630,7 @@ function renderStats(){
         (m != null ? ` · pēc ${n} ${n === 1 ? "korekcijas" : "korekcijām"} bez ēdiena: ${fmt(m,1)} mmol/l` + (n < 3 ? " (vēl maz datu)" : "") : " · no korekcijām vēl nav datu"), true); })() +
     st(S.perMv ? fmt(gPerMv/S.perMv,0)+" g" : "", "OH uz 1 v", S.perMv ? "cik g ogļhidrātu vidēji nosegusi 1 v Apidra (≈ " + fmt(1/S.perMv,1) + " MV) · pēc Jūsu ierakstiem, ar korekcijām" : "") +
     (() => { const m = median(S.isfEv.map(x => x.isf)); const isfUse = S.isf != null ? S.isf : m; const g = S.perMv && isfUse ? (gPerMv/S.perMv) / isfUse : null; const gReal = S.perMv && m ? (gPerMv/S.perMv) / m : null; return st(g != null ? fmt(g,1)+" g" : "—", "Glikoze uz +1 mmol/l",
-      g != null ? "cik g tīras glikozes paaugstina cukuru par 1 mmol/l · OH uz 1 v ÷ jutība" + (gReal != null && Math.abs(gReal - g) >= 0.1 ? ` · pēc korekcijām: ${fmt(gReal,1)} g` : "") : "cik g tīras glikozes paaugstina cukuru par 1 mmol/l · vajag MV un insulīna ierakstus"); })() +
+      g != null ? "cik g tīras glikozes paaugstina cukuru par 1 mmol/l" + (tabletG ? ` (≈ ${fmt(g/tabletG,1)} tabl. pa ${fmt(tabletG,1)} g)` : "") + " · OH uz 1 v ÷ jutība" + (gReal != null && Math.abs(gReal - g) >= 0.1 ? ` · pēc korekcijām: ${fmt(gReal,1)} g` : "") : "cik g tīras glikozes paaugstina cukuru par 1 mmol/l · vajag MV un insulīna ierakstus"); })() +
     st(S.gAvg!=null ? fmt(S.gAvg,1)+" mmol/l" : "", "Vid. cukurs no pirksta", S.gN ? S.gN+" mērījumi" : "Nav mērījumu") +
     (S.cgm ? st(fmt(S.cgm.tir,0)+"%", "Dexcom: laiks diapazonā", "3,9–10 mmol/l", true) + st(fmt(S.cgm.avg,1)+" mmol/l", "Dexcom vidējais", `zem 3,9: ${fmt(S.cgm.lo,0)}% · virs 10: ${fmt(S.cgm.hi,0)}%`)
            : st("", "Dexcom dati", "nav importēti šim periodam") + st(fmt(S.tab), "Glikozes tabletes kopā", ""));
@@ -688,6 +688,7 @@ async function renderFamily(){
   const me = members[user.id] || {};
   $("#myName").value = me.display_name || "";
   $("#gPerMv").value = fmt(gPerMv); $("#gPerMv").disabled = role !== "owner";
+  $("#tabletG").value = tabletG != null ? fmt(tabletG,1) : ""; $("#tabletG").disabled = role !== "owner";
   const ml = $("#memberList"); ml.innerHTML = "";
   Object.values(members).sort((a,b) => ["owner","family","caregiver"].indexOf(a.role) - ["owner","family","caregiver"].indexOf(b.role)).forEach(m => {
     const li = document.createElement("li");
@@ -737,8 +738,10 @@ $("#saveSettings").onclick = async () => {
   if (role === "owner") {
     const v = num($("#gPerMv").value);
     if (!v || v < 5 || v > 20) { toast("1 MV jābūt no 5 līdz 20 g"); return; }
-    const { error } = await sb.from("children").update({ g_per_mv: v }).eq("id", child.id);
-    if (!error) gPerMv = v;
+    const tg = num($("#tabletG").value);
+    if (tg != null && (tg <= 0 || tg > 20)) { toast("Tabletes svaram jābūt no 0,1 līdz 20 g"); return; }
+    const { error } = await sb.from("children").update({ g_per_mv: v, tablet_g: tg }).eq("id", child.id);
+    if (!error) { gPerMv = v; tabletG = tg; }
   }
   await loadMemberships(); const m = memberships.find(x => x.child_id === child.id);
   $("#roleLabel").textContent = (m && m.display_name ? m.display_name + " · " : "") + ROLE[role];
