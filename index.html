@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Nunito:wght@700;800;900&display=swap">
-<link rel="stylesheet" href="app.css?v=10">
+<link rel="stylesheet" href="app.css?v=11">
 </head>
 <body>
 <div id="app">
@@ -132,6 +132,17 @@
         </div>
       </div>
 
+      <!-- RECIPES -->
+      <div id="viewRecipes" class="view" hidden>
+        <div class="rechead">
+          <h2>Receptes</h2>
+          <button class="btn primary" id="recNew" type="button">+ Jauna recepte</button>
+        </div>
+        <input id="recSearch" type="search" placeholder="Meklēt recepti…" aria-label="Meklēt recepti">
+        <div id="recList" class="reclist"></div>
+        <p class="hint">Ogļhidrāti uz 100 g pie sastāvdaļām ir aptuveni. Ja uz iepakojuma ir cits skaitlis, ieraksti to.</p>
+      </div>
+
       <!-- FAMILY -->
       <div id="viewFamily" class="view" hidden>
         <div class="card">
@@ -187,6 +198,7 @@
     <nav class="tabbar" aria-label="Sadaļas">
       <button type="button" data-v="day" aria-current="page"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Diena</button>
       <button type="button" data-v="stats"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 19h16M7 16V10M12 16V5M17 16v-4"/></svg>Pārskats</button>
+      <button type="button" data-v="recipes"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/><path d="M9 8h6"/></svg>Receptes</button>
       <button type="button" data-v="family"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><circle cx="17" cy="9.5" r="2.4"/><path d="M3 19c.8-3.4 3.2-5 6-5s5.2 1.6 6 5M15 14.6c2.6-.3 4.6 1 5.4 3.9"/></svg>Ģimene</button>
     </nav>
   </section>
@@ -196,7 +208,7 @@
 <div id="printArea" aria-hidden="true"></div>
 
 <script src="vendor/supabase-2.45.4.js"></script>
-<script src="config.js?v=10"></script>
-<script src="app.js?v=10"></script>
+<script src="config.js?v=11"></script>
+<script src="app.js?v=11"></script>
 </body>
 </html>
