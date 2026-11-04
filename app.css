@@ -233,3 +233,6 @@ td button{border:0;background:none;color:var(--blue);padding:0;font-weight:700;t
 .seg2 button{flex:1;border:0;background:none;border-radius:8px;padding:8px;font-weight:700;color:var(--muted)}
 .seg2 button[aria-pressed="true"]{background:var(--paper);color:var(--ink)}
 .recnote{white-space:pre-wrap;font-size:.92rem;color:var(--muted);margin:0}
+
+.chips.presets{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.chips.presets .pchip{padding-left:4px;padding-right:4px;font-size:.85rem;white-space:nowrap;text-align:center;min-width:0}
