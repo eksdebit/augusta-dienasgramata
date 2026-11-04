@@ -294,7 +294,7 @@ function renderCgm(){
   const el = $("#cgmCard");
   if (!cgmDay || !cgmDay.v.length) { el.hidden = true; el.innerHTML = ""; return; }
   const S = cgmStats([cgmDay]); el.hidden = false;
-  el.innerHTML = `<div class="cgmhead"><b>Dexcom</b><span class="cgmline">vid. <strong>${fmt(S.avg,1)}</strong> · diapazonā <strong>${fmt(S.tir,0)}%</strong> · zem 3,9 <strong>${fmt(S.lo,0)}%</strong> · virs 10 <strong>${fmt(S.hi,0)}%</strong></span></div>${cgmSvg(cgmDay, fingerMarks(entries), PAL_PAGE)}<div class="cgmline">Zaļā josla 3,9–10 mmol/l · oranžie punkti ir mērījumi no pirksta</div>`;
+  el.innerHTML = `<div class="cgmhead"><b>Dexcom</b><span class="cgmline">vid. <strong>${fmt(S.avg,1)} mmol/l</strong> · diapazonā <strong>${fmt(S.tir,0)}%</strong> · zem 3,9 <strong>${fmt(S.lo,0)}%</strong> · virs 10 <strong>${fmt(S.hi,0)}%</strong></span></div>${cgmSvg(cgmDay, fingerMarks(entries), PAL_PAGE)}<div class="cgmline">Zaļā josla 3,9–10 mmol/l · oranžie punkti ir mērījumi no pirksta</div>`;
 }
 function splitCsv(line,d){
   const out = []; let c = "", q = false;
@@ -593,15 +593,15 @@ function renderStats(){
     st(fmt(S.tdd,1)+(S.tdd!=null?" v":""), "Vid. kopējā deva dienā", S.n ? `${S.n} dienas ar insulīnu` : "Nav insulīna ierakstu", true) +
     st(fmt(S.bas,1)+(S.bas!=null?" v":""), "Vid. ilgais (bazālais)", S.basPct!=null ? fmt(S.basPct,0)+"% no kopējās" : "") +
     st(fmt(S.bol,1)+(S.bol!=null?" v":""), "Vid. īsais dienā", "") +
-    st(fmt(S.mv,1), "Vid. MV dienā", "") +
+    st(S.mv!=null ? fmt(S.mv,1)+" MV" : "", "Vid. MV dienā", "") +
     st(S.perMv!=null ? fmt(S.perMv,2)+" v" : "", "Īsais uz 1 MV", "tik vienību Apidra vidēji iedots uz 1 MV (ar korekcijām)", true) +
-    st(S.isf!=null ? fmt(S.isf,1) : "", "Jutība, mmol/l uz 1 v", "par cik mmol/l 1 v Apidra aptuveni pazemina cukuru · 100 ÷ vid. dienas deva", true) +
+    st(S.isf!=null ? fmt(S.isf,1)+" mmol/l" : "", "Jutība uz 1 v", "par cik mmol/l 1 v Apidra aptuveni pazemina cukuru · 100 ÷ vid. dienas deva", true) +
     st(S.perMv ? fmt(gPerMv/S.perMv,0)+" g" : "", "OH uz 1 v", S.perMv ? "cik g ogļhidrātu vidēji nosegusi 1 v Apidra (≈ " + fmt(1/S.perMv,1) + " MV) · pēc Jūsu ierakstiem, ar korekcijām" : "") +
-    st(S.gAvg!=null ? fmt(S.gAvg,1) : "", "Vid. cukurs no pirksta", S.gN ? S.gN+" mērījumi" : "Nav mērījumu") +
-    (S.cgm ? st(fmt(S.cgm.tir,0)+"%", "Dexcom: laiks diapazonā", "3,9–10 mmol/l", true) + st(fmt(S.cgm.avg,1), "Dexcom vid., mmol/l", `zem 3,9: ${fmt(S.cgm.lo,0)}% · virs 10: ${fmt(S.cgm.hi,0)}%`)
+    st(S.gAvg!=null ? fmt(S.gAvg,1)+" mmol/l" : "", "Vid. cukurs no pirksta", S.gN ? S.gN+" mērījumi" : "Nav mērījumu") +
+    (S.cgm ? st(fmt(S.cgm.tir,0)+"%", "Dexcom: laiks diapazonā", "3,9–10 mmol/l", true) + st(fmt(S.cgm.avg,1)+" mmol/l", "Dexcom vidējais", `zem 3,9: ${fmt(S.cgm.lo,0)}% · virs 10: ${fmt(S.cgm.hi,0)}%`)
            : st("", "Dexcom dati", "nav importēti šim periodam") + st(fmt(S.tab), "Glikozes tabletes kopā", ""));
   const rows = S.per.map(p => `<tr><td><button type="button" data-d="${p.date}">${shortDate(p.date)}</button></td><td>${fmt(p.bas)}</td><td>${fmt(p.bol)}</td><td>${fmt(p.tdd)}</td><td>${fmt(p.mv,1)}</td><td>${p.mv>0&&p.bol>0?fmt(p.bol/p.mv,2):""}</td><td>${fmt(p.tab)}</td><td>${p.cgm?fmt(p.cgm.tir,0)+"%":""}</td></tr>`).join("");
-  $("#dayTable").innerHTML = `<thead><tr><th>Diena</th><th>Ilgais</th><th>Īsais</th><th>Kopā</th><th>MV</th><th>v/MV</th><th>Tab.</th><th>Diap.</th></tr></thead><tbody>${rows || `<tr><td colspan="8">Šajā periodā nav ierakstu</td></tr>`}</tbody>`;
+  $("#dayTable").innerHTML = `<thead><tr><th>Diena</th><th>Ilgais v</th><th>Īsais v</th><th>Kopā v</th><th>MV</th><th>v/MV</th><th>Tab.</th><th>Diap.</th></tr></thead><tbody>${rows || `<tr><td colspan="8">Šajā periodā nav ierakstu</td></tr>`}</tbody>`;
   $("#dayTable").querySelectorAll("button[data-d]").forEach(b => b.onclick = () => { cur = b.dataset.d; setView("day"); loadDay(); });
 }
 
@@ -619,13 +619,13 @@ function printHTML(from, to, byDay, cgm){
       return `<tr><td class="t">${esc(e.time||"")}</td><td>${what}${e.note ? `<div class="n">${esc(e.note)}</div>` : ""}</td><td class="r">${e.kind==="meal"&&e.mv!=null ? (e.mv_est?"≈":"")+fmt(e.mv,1) : ""}</td><td class="r">${e.kind==="bolus" ? fmt(e.units) : ""}</td><td class="r">${e.kind==="basal" ? fmt(e.units) : ""}</td><td class="r">${gl}${e.kind==="tablets" ? (gl?"<br>":"")+fmt(e.count)+" tab." : ""}</td></tr>`;
     }).join("");
     return `<section class="pday"><h2><span class="num">${Number(d.slice(8))}</span>${esc(prettyDate(d))}</h2>${chart}
-      ${list.length ? `<table><thead><tr><th>Laiks</th><th>Ieraksts</th><th>MV</th><th>Īsais v</th><th>Ilgais v</th><th>Cukurs / tab.</th></tr></thead><tbody>${rows}</tbody>
+      ${list.length ? `<table><thead><tr><th>Laiks</th><th>Ieraksts</th><th>MV</th><th>Īsais v</th><th>Ilgais v</th><th>Cukurs mmol/l / tab.</th></tr></thead><tbody>${rows}</tbody>
       <tfoot><tr><td></td><td>Kopā</td><td class="r">${fmt(t.mv,1)}</td><td class="r">${fmt(t.bol)}</td><td class="r">${fmt(t.bas)}</td><td class="r">${t.tab ? fmt(t.tab)+" tab." : ""}</td></tr></tfoot></table>
       <div class="sum">Kopējā deva: <b>${fmt(t.tdd)} v</b>${t.mv>0&&t.bol>0 ? ` · īsais uz 1 MV: <b>${fmt(t.bol/t.mv,2)} v</b>` : ""}</div>` : ""}</section>`;
   }).join("");
   const box = (v,l) => `<div><b>${v || "—"}</b><span>${l}</span></div>`;
   return `<div class="pr"><h1>${esc(child.name)} · Cukuriņa pieraksti</h1><div class="sub">${from === to ? esc(prettyDate(from)) : esc(prettyDate(from)) + " – " + esc(prettyDate(to))}</div>
-    ${from === to ? "" : `<div class="pstats">${box(S.tdd!=null?fmt(S.tdd,1)+" v":"", "Vid. kopējā deva dienā")}${box(S.bas!=null?fmt(S.bas,1)+" v":"", "Vid. ilgais")}${box(S.bol!=null?fmt(S.bol,1)+" v":"", "Vid. īsais")}${box(fmt(S.mv,1), "Vid. MV dienā")}${box(S.perMv!=null?fmt(S.perMv,2)+" v":"", "Īsais uz 1 MV")}${box(S.isf!=null?fmt(S.isf,1):"", "Jutība mmol/l uz 1 v")}${box(S.cgm?fmt(S.cgm.tir,0)+"%":"", "Dexcom diapazonā 3,9–10")}${box(S.cgm?fmt(S.cgm.avg,1):(S.gAvg!=null?fmt(S.gAvg,1):""), S.cgm ? "Dexcom vid. mmol/l" : "Vid. cukurs no pirksta")}</div>`}
+    ${from === to ? "" : `<div class="pstats">${box(S.tdd!=null?fmt(S.tdd,1)+" v":"", "Vid. kopējā deva dienā")}${box(S.bas!=null?fmt(S.bas,1)+" v":"", "Vid. ilgais")}${box(S.bol!=null?fmt(S.bol,1)+" v":"", "Vid. īsais")}${box(S.mv!=null?fmt(S.mv,1)+" MV":"", "Vid. MV dienā")}${box(S.perMv!=null?fmt(S.perMv,2)+" v":"", "Īsais uz 1 MV")}${box(S.isf!=null?fmt(S.isf,1)+" mmol/l":"", "Jutība uz 1 v")}${box(S.cgm?fmt(S.cgm.tir,0)+"%":"", "Dexcom diapazonā 3,9–10")}${box(S.cgm?fmt(S.cgm.avg,1)+" mmol/l":(S.gAvg!=null?fmt(S.gAvg,1)+" mmol/l":""), S.cgm ? "Dexcom vidējais" : "Vid. cukurs no pirksta")}</div>`}
     <div class="pdisc">Aprēķini ir aptuveni un domāti sarunai ar endokrinologu. 1 MV = ${fmt(gPerMv)} g ogļhidrātu. “≈” — MV aprēķinātas no ēdienu sastāva.</div>
     ${dayHTML || "<p>Šajā periodā nav ierakstu.</p>"}</div>`;
 }
