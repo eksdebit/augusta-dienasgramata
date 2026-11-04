@@ -1,7 +1,7 @@
 /* Layout: one narrow column like a diary page — top bar, date, day totals, sensor curve, time-ruled log; dictation dock and tab bar pinned at the bottom.
    Palette taken from the bear icon: cream paper, honey-brown, soft sky blue. */
 :root{
-  --paper:#fdf6ea; --sheet:#fffdf8; --ink:#2e241b; --muted:#80705f; --rule:#eedfc8;
+  --paper:#FAF7F2; --sheet:#F0E6DC; --bar:#F7F0E8; --ink:#4E3B30; --muted:#79685C; --rule:#E3D5C6;
   --bear:#a8642c; --bear-soft:#f6e6d3;
   --blue:#2f6fc0; --blue-soft:#e4eefb;
   --basal:#7048b8; --basal-soft:#efe8fa;
@@ -15,17 +15,6 @@
   --safe-b:env(safe-area-inset-bottom, 0px);
   color-scheme:light;
 }
-@media (prefers-color-scheme: dark){:root{
-  --paper:#1c1712; --sheet:#262019; --ink:#f1e8dc; --muted:#b2a290; --rule:#3a3027;
-  --bear:#e0a26c; --bear-soft:#3a2b1e;
-  --blue:#8db8f2; --blue-soft:#22324a;
-  --basal:#c4a6f5; --basal-soft:#2f2643;
-  --bolus:#8db8f2; --bolus-soft:#22324a;
-  --meal:#86d2a2; --meal-soft:#1e3527;
-  --sugar:#f29c78; --sugar-soft:#3d271d;
-  --gluc:#e9c464; --gluc-soft:#372d15;
-  --danger:#ff8a80; --onaccent:#141009;
-  color-scheme:dark}}
 *{box-sizing:border-box}
 html,body{margin:0}
 body{background:var(--paper);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.45;-webkit-text-size-adjust:100%}
@@ -162,7 +151,7 @@ td button{border:0;background:none;color:var(--blue);padding:0;font-weight:700;t
 .invlink code{font-size:.82rem;overflow-wrap:anywhere;user-select:all}
 
 /* dock + tab bar */
-.dock{position:fixed;left:0;right:0;bottom:calc(64px + var(--safe-b));z-index:6;background:var(--sheet);border-top:1px solid var(--rule);
+.dock{position:fixed;left:0;right:0;bottom:calc(64px + var(--safe-b));z-index:6;background:var(--bar);border-top:1px solid var(--rule);
   padding:10px max(16px,env(safe-area-inset-right,0px)) 10px max(16px,env(safe-area-inset-left,0px));box-shadow:0 -6px 20px rgba(90,60,20,.07)}
 .dock-in{max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:6px}
 .inrow{display:flex;gap:8px;align-items:flex-end}
@@ -172,7 +161,7 @@ td button{border:0;background:none;color:var(--blue);padding:0;font-weight:700;t
 .photobtn{display:flex;align-items:center;justify-content:center;gap:5px;min-height:42px;border-radius:12px;border:1px solid var(--rule);background:var(--paper);color:var(--ink);font-size:.8rem;font-weight:700;padding:4px 6px;line-height:1.15;text-align:center}
 .photobtn svg{flex:none;color:var(--bear)}
 .photobtn:disabled{opacity:.55}
-.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:7;display:flex;background:var(--sheet);border-top:1px solid var(--rule);
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:7;display:flex;background:var(--bar);border-top:1px solid var(--rule);
   padding:4px max(8px,env(safe-area-inset-right,0px)) calc(4px + var(--safe-b)) max(8px,env(safe-area-inset-left,0px))}
 .tabbar button{flex:1;border:0;background:none;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:.74rem;font-weight:700;color:var(--muted);padding:6px 0;min-height:56px}
 .tabbar button[aria-current="page"]{color:var(--bear)}
