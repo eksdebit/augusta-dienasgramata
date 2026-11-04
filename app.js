@@ -247,7 +247,7 @@ function dayTotals(list){
 }
 function renderLog(){
   const log = $("#log"); const list = sortE(entries);
-  if (!list.length) log.innerHTML = `<div class="empty"><strong>Šai dienai vēl nav ierakstu</strong>Nodiktē pirmo ierakstu apakšā, piemēram: “8:25 cukurs 7,2, Apidra viena vienība”, vai nofotografē glikometru.</div>`;
+  if (!list.length) log.innerHTML = `<div class="empty"><strong>Šai dienai vēl nav ierakstu</strong>Ieraksti pirmo ierakstu apakšā, piemēram: “8:25 cukurs 7,2, Apidra viena vienība”, vai nofotografē glikometru.</div>`;
   else {
     log.innerHTML = "";
     list.forEach(e => { const b = document.createElement("button"); b.type = "button"; b.className = "row k-"+(e.kind||"note"); b.innerHTML = lineFor(e); b.onclick = () => openEdit(e); log.appendChild(b); });
