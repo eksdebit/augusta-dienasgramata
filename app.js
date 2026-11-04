@@ -318,6 +318,17 @@ function renderLog(){
   }
   const t = dayTotals(list);
   $("#tBasal").textContent = fmt(t.bas); $("#tBolus").textContent = fmt(t.bol); $("#tMv").textContent = fmt(t.mv,1); $("#tTab").textContent = fmt(t.tab);
+  // sick-day summary sits under the day's entries
+  const sk = $("#sickStrip");
+  if (t.ketMax == null && t.tempMax == null && !t.meds) { sk.hidden = true; sk.innerHTML = ""; }
+  else {
+    const L = ketLevel(t.ketMax);
+    sk.hidden = false;
+    sk.innerHTML = `<span class="lab">Slimības dati šajā dienā</span>` +
+      (t.ketMax != null ? `<span>Ketoni max <b>${fmt(t.ketMax,1)}</b>${L ? ` <span class="klev ${L[1]}">${L[0]}</span>` : ""}</span>` : "") +
+      (t.tempMax != null ? `<span>Temperatūra max <b>${fmt(t.tempMax,1)} °C</b></span>` : "") +
+      (t.meds ? `<span>Zāles <b>${t.meds}×</b></span>` : "");
+  }
 }
 
 /* ---------- Dexcom CGM ---------- */
@@ -797,13 +808,11 @@ function renderStats(){
     st(S.perMv ? fmt(gPerMv/S.perMv,0)+" g" : "", "OH uz 1 v", S.perMv ? "cik g ogļhidrātu vidēji nosegusi 1 v Apidra (≈ " + fmt(1/S.perMv,1) + " MV) · pēc Jūsu ierakstiem, ar korekcijām" : "") +
     (() => { const m = median(S.isfEv.map(x => x.isf)); const isfUse = S.isf != null ? S.isf : m; const g = S.perMv && isfUse ? (gPerMv/S.perMv) / isfUse : null; const gReal = S.perMv && m ? (gPerMv/S.perMv) / m : null; return st(g != null ? fmt(g,1)+" g" : "—", "Glikoze uz +1 mmol/l",
       g != null ? "cik g tīras glikozes paaugstina cukuru par 1 mmol/l" + (tabletG ? ` (≈ ${fmt(g/tabletG,1)} tabl. pa ${fmt(tabletG,1)} g)` : "") + " · OH uz 1 v ÷ jutība" + (gReal != null && Math.abs(gReal - g) >= 0.1 ? ` · pēc korekcijām: ${fmt(gReal,1)} g` : "") : "cik g tīras glikozes paaugstina cukuru par 1 mmol/l · vajag MV un insulīna ierakstus"); })() : "") +
-    (S.ketMax != null ? st(fmt(S.ketMax,1)+" mmol/l", "Ketoni max", S.sickDays ? S.sickDays + " slimības dienas" : "") : "") +
-    (S.tempMax != null ? st(fmt(S.tempMax,1)+" °C", "Temperatūra max", S.meds ? "zāles dotas " + S.meds + "×" : "") : "") +
     st(S.gAvg!=null ? fmt(S.gAvg,1)+" mmol/l" : "", "Vid. cukurs no pirksta", S.gN ? S.gN+" mērījumi" : "Nav mērījumu") +
     (S.cgm ? st(fmt(S.cgm.tir,0)+"%", "Dexcom: laiks diapazonā", "3,9–10 mmol/l", true) + st(fmt(S.cgm.avg,1)+" mmol/l", "Dexcom vidējais", `zem 3,9: ${fmt(S.cgm.lo,0)}% · virs 10: ${fmt(S.cgm.hi,0)}%`)
            : st("", "Dexcom dati", "nav importēti šim periodam"));
-  const rows = S.per.map(p => `<tr><td><button type="button" data-d="${p.date}">${shortDate(p.date)}</button></td><td>${fmt(p.bas)}</td><td>${fmt(p.bol)}</td><td>${fmt(p.tdd)}</td><td>${fmt(p.mv,1)}</td>${showCalcs ? `<td>${p.mv>0&&p.bol>0?fmt(p.bol/p.mv,2):""}</td>` : ""}<td>${fmt(p.tab)}</td><td>${p.ketMax!=null?fmt(p.ketMax,1):""}</td><td>${p.cgm?fmt(p.cgm.tir,0)+"%":""}</td></tr>`).join("");
-  $("#dayTable").innerHTML = `<thead><tr><th>Diena</th><th>Ilgais v</th><th>Īsais v</th><th>Kopā v</th><th>MV</th>${showCalcs ? "<th>v/MV</th>" : ""}<th>Tab.</th><th>Ket.</th><th>Diap.</th></tr></thead><tbody>${rows || `<tr><td colspan="9">Šajā periodā nav ierakstu</td></tr>`}</tbody>`;
+  const rows = S.per.map(p => `<tr><td><button type="button" data-d="${p.date}">${shortDate(p.date)}</button></td><td>${fmt(p.bas)}</td><td>${fmt(p.bol)}</td><td>${fmt(p.tdd)}</td><td>${fmt(p.mv,1)}</td>${showCalcs ? `<td>${p.mv>0&&p.bol>0?fmt(p.bol/p.mv,2):""}</td>` : ""}<td>${fmt(p.tab)}</td><td>${p.cgm?fmt(p.cgm.tir,0)+"%":""}</td></tr>`).join("");
+  $("#dayTable").innerHTML = `<thead><tr><th>Diena</th><th>Ilgais v</th><th>Īsais v</th><th>Kopā v</th><th>MV</th>${showCalcs ? "<th>v/MV</th>" : ""}<th>Tab.</th><th>Diap.</th></tr></thead><tbody>${rows || `<tr><td colspan="8">Šajā periodā nav ierakstu</td></tr>`}</tbody>`;
   $("#dayTable").querySelectorAll("button[data-d]").forEach(b => b.onclick = () => { cur = b.dataset.d; setView("day"); loadDay(); });
 }
 
@@ -827,7 +836,7 @@ function printHTML(from, to, byDay, cgm){
   }).join("");
   const box = (v,l) => `<div><b>${v || "—"}</b><span>${l}</span></div>`;
   return `<div class="pr"><h1>${esc(child.name)} · Cukuriņa pieraksti</h1><div class="sub">${from === to ? esc(prettyDate(from)) : esc(prettyDate(from)) + " – " + esc(prettyDate(to))}</div>
-    ${from === to ? "" : `<div class="pstats">${box(S.tdd!=null?fmt(S.tdd,1)+" v":"", "Vid. kopējā deva dienā")}${box(S.bas!=null?fmt(S.bas,1)+" v":"", "Vid. ilgais")}${box(S.bol!=null?fmt(S.bol,1)+" v":"", "Vid. īsais")}${box(S.mv!=null?fmt(S.mv,1)+" MV":"", "Vid. MV dienā")}${showCalcs ? box(S.perMv!=null?fmt(S.perMv,2)+" v":"", "Īsais uz 1 MV") + (() => { const m = median(S.isfEv.map(x => x.isf)); return box(S.isf!=null?fmt(S.isf,1)+" mmol/l":"", "Jutība uz 1 v (100 ÷ dienas deva)" + (m!=null ? "; pēc korekcijām " + fmt(m,1) : "")); })() : box(S.ketMax!=null?fmt(S.ketMax,1)+" mmol/l":"", "Ketoni max") + box(S.gAvg!=null?fmt(S.gAvg,1)+" mmol/l":"", "Vid. cukurs no pirksta")}${box(S.cgm?fmt(S.cgm.tir,0)+"%":"", "Dexcom diapazonā 3,9–10")}${box(S.cgm?fmt(S.cgm.avg,1)+" mmol/l":(S.gAvg!=null?fmt(S.gAvg,1)+" mmol/l":""), S.cgm ? "Dexcom vidējais" : "Vid. cukurs no pirksta")}</div>`}
+    ${from === to ? "" : `<div class="pstats">${box(S.tdd!=null?fmt(S.tdd,1)+" v":"", "Vid. kopējā deva dienā")}${box(S.bas!=null?fmt(S.bas,1)+" v":"", "Vid. ilgais")}${box(S.bol!=null?fmt(S.bol,1)+" v":"", "Vid. īsais")}${box(S.mv!=null?fmt(S.mv,1)+" MV":"", "Vid. MV dienā")}${showCalcs ? box(S.perMv!=null?fmt(S.perMv,2)+" v":"", "Īsais uz 1 MV") + (() => { const m = median(S.isfEv.map(x => x.isf)); return box(S.isf!=null?fmt(S.isf,1)+" mmol/l":"", "Jutība uz 1 v (100 ÷ dienas deva)" + (m!=null ? "; pēc korekcijām " + fmt(m,1) : "")); })() : box(S.gAvg!=null?fmt(S.gAvg,1)+" mmol/l":"", "Vid. cukurs no pirksta")}${box(S.cgm?fmt(S.cgm.tir,0)+"%":"", "Dexcom diapazonā 3,9–10")}${box(S.cgm?fmt(S.cgm.avg,1)+" mmol/l":(S.gAvg!=null?fmt(S.gAvg,1)+" mmol/l":""), S.cgm ? "Dexcom vidējais" : "Vid. cukurs no pirksta")}</div>`}
     <div class="pdisc">${showCalcs ? "Aprēķini ir aptuveni un domāti sarunai ar endokrinologu. " : ""}1 MV = ${fmt(gPerMv)} g ogļhidrātu. “≈” — MV aprēķinātas no ēdienu sastāva.</div>
     ${dayHTML || "<p>Šajā periodā nav ierakstu.</p>"}</div>`;
 }

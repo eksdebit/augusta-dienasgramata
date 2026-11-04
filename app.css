@@ -259,7 +259,7 @@ body.locked{position:fixed;left:0;right:0;overflow:hidden}
 .chips.presets{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
 .chips.presets .pchip{padding-left:4px;padding-right:4px;font-size:.85rem;white-space:nowrap;text-align:center;min-width:0}
 /* sick days, consent, admin */
-.sick{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;background:var(--sugar-soft);border-radius:14px;padding:10px 12px;font-size:.9rem;font-variant-numeric:tabular-nums}
+.sick{margin-top:12px;display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;background:var(--sugar-soft);border-radius:14px;padding:10px 12px;font-size:.9rem;font-variant-numeric:tabular-nums}
 .sick b{font-family:var(--display)}
 .sick .lab{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:var(--sugar);width:100%}
 .bg.ket{background:var(--basal-soft);color:var(--basal)}
