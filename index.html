@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Nunito:wght@700;800;900&display=swap">
-<link rel="stylesheet" href="app.css?v=11">
+<link rel="stylesheet" href="app.css?v=12">
 </head>
 <body>
 <div id="app">
@@ -87,7 +87,6 @@
         </div>
         <div class="cgm" id="cgmCard" hidden></div>
         <div class="log" id="log"><div class="empty"><strong>Ielādē…</strong></div></div>
-        <div class="rowbtns"><button class="btn small" id="copyDay" type="button">Kopēt dienu kā tekstu</button><button class="btn small" id="printDay" type="button">Drukāt dienu</button></div>
       </div>
 
       <!-- OVERVIEW -->
@@ -117,7 +116,7 @@
         <div class="card">
           <h2>Drukāt un eksportēt</h2>
           <div class="rowbtns"><button class="btn primary" id="printPeriod" type="button">Drukāt periodu</button><button class="btn" id="dlCsv" type="button">Excel (CSV)</button></div>
-          <p class="hint">Katra diena drukājas atsevišķā A4 blokā ar sensora līkni. Drukas logā var izvēlēties arī “Saglabāt kā PDF”.</p>
+          <p class="hint">Katra diena drukājas atsevišķā A4 blokā ar sensora līkni. Lai izdrukātu vienu dienu, laukos “No” un “Līdz” izvēlies to pašu datumu. Drukas logā var izvēlēties arī “Saglabāt kā PDF”.</p>
         </div>
         <div class="card" id="cgmImportCard">
           <h2>Dexcom sensora dati</h2>
@@ -208,7 +207,7 @@
 <div id="printArea" aria-hidden="true"></div>
 
 <script src="vendor/supabase-2.45.4.js"></script>
-<script src="config.js?v=11"></script>
-<script src="app.js?v=11"></script>
+<script src="config.js?v=12"></script>
+<script src="app.js?v=12"></script>
 </body>
 </html>

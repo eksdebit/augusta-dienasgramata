@@ -546,13 +546,6 @@ function entryText(e){
   if (e.note && e.kind !== "note") s += ` — ${e.note}`;
   return s;
 }
-$("#copyDay").onclick = () => {
-  const list = sortE(entries); const t = dayTotals(list);
-  const lines = [`${child.name} — ${prettyDate(cur)}`].concat(list.map(e => (e.time||"--:--") + "  " + entryText(e)));
-  lines.push(`Kopā: ilgais ${fmt(t.bas)} v, īsais ${fmt(t.bol)} v, ${fmt(t.mv,1)} MV, ${fmt(t.tab)} glik. tab.`);
-  const txt = lines.join("\n");
-  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(() => toast("Nokopēts"), () => toast("Neizdevās nokopēt"));
-};
 
 /* ---------- overview ---------- */
 document.querySelectorAll("#presets .pchip").forEach(b => b.onclick = () => {
@@ -641,7 +634,6 @@ function doPrint(html){
   setTimeout(() => { window.print(); }, 50);
 }
 window.addEventListener("afterprint", () => { $("#printArea").innerHTML = ""; });
-$("#printDay").onclick = () => { const by = {}; by[cur] = entries; const c = {}; if (cgmDay) c[cur] = cgmDay; doPrint(printHTML(cur, cur, by, c)); if (view === "stats") loadPeriod(); };
 $("#printPeriod").onclick = () => doPrint(printHTML(period.from, period.to, pByDay, pCgm));
 $("#dlCsv").onclick = () => {
   const q = v => { const s = String(v ?? ""); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s; };
@@ -783,7 +775,7 @@ function openRecipe(r){
     <h2>${esc(r.name)}</h2>
     <div class="calcbox">
       <div class="calc"><b>${fmt(t.oh,0)} g</b><span>OH visam ēdienam · ${fmt(t.mv,1)} MV</span></div>
-      <div class="calc"><b>${t.per100 != null ? fmt(t.per100,1) + " g" : "—"}</b><span>OH uz 100 g gatavā ēdiena</span></div>
+      <div class="calc"><b>${t.per100 != null ? fmt(t.per100,1) + " g" : "—"}</b><span>${num(r.cooked_g) ? "OH uz 100 g gatavā ēdiena" : "OH uz 100 g (pēc sastāvdaļu svara, gatavais nav nosvērts)"}</span></div>
       ${t.piece ? `<div class="calc"><b>${fmt(t.piece.mv,1)} MV</b><span>1 gab. ≈ ${fmt(t.piece.g,0)} g · ${fmt(t.piece.oh,1)} g OH</span></div>` : ""}
       ${t.portion ? `<div class="calc"><b>${fmt(t.portion.mv,1)} MV</b><span>porcija ${fmt(t.portion.g,0)} g · ${fmt(t.portion.oh,1)} g OH</span></div>` : ""}
     </div>
@@ -791,11 +783,12 @@ function openRecipe(r){
     <div class="card" style="padding:12px">
       <h2 style="font-size:1rem">Cik apēda?</h2>
       <div class="seg2" id="ateMode">
-        <button type="button" data-m="g" aria-pressed="${t.piece ? "false" : "true"}">Grami</button>
+        <button type="button" data-m="all" aria-pressed="${t.piece ? "false" : "true"}">Daļa no visa</button>
         ${t.piece ? `<button type="button" data-m="pc" aria-pressed="true">Gabali</button>` : ""}
+        <button type="button" data-m="g" aria-pressed="false">Grami</button>
       </div>
       <div class="ate">
-        <label>Daudzums<input id="ateVal" inputmode="decimal" value="${t.piece ? "1" : (t.portion ? fmt(t.portion.g,0) : "100")}"></label>
+        <label><span id="ateLbl">Daudzums</span><input id="ateVal" inputmode="decimal" value="1"></label>
         <div class="calc hl"><b id="ateMv">—</b><span id="ateOh"></span></div>
       </div>
       <label>Ēdienreize<select id="ateMeal"><option>Brokastis</option><option>Pusdienas</option><option>Launags</option><option>Vakariņas</option><option selected>Uzkoda</option></select></label>
@@ -811,12 +804,14 @@ function openRecipe(r){
   </div>`;
   $("#sheetHost").innerHTML = ""; $("#sheetHost").appendChild(wrap);
   const q = s => wrap.querySelector(s);
-  let mode = t.piece ? "pc" : "g";
+  let mode = t.piece ? "pc" : "all";
+  const LBL = { all: "Daļa (1 = viss, 0,5 = puse)", pc: "Gabali", g: "Grami" };
   const calc = () => {
+    q("#ateLbl").textContent = LBL[mode];
     const v = num(q("#ateVal").value);
     if (v == null || v <= 0) { q("#ateMv").textContent = "—"; q("#ateOh").textContent = ""; return null; }
-    const g = mode === "pc" ? v * t.piece.g : v;
-    const oh = mode === "pc" ? v * t.piece.oh : (t.per100 != null ? t.per100 * v / 100 : null);
+    const g = mode === "pc" ? v * t.piece.g : mode === "all" ? v * t.cooked : v;
+    const oh = mode === "pc" ? v * t.piece.oh : mode === "all" ? v * t.oh : (t.per100 != null ? t.per100 * v / 100 : null);
     if (oh == null) { q("#ateMv").textContent = "—"; return null; }
     q("#ateMv").textContent = fmt(oh / gPerMv, 1) + " MV";
     q("#ateOh").textContent = `${fmt(oh,1)} g OH · ≈ ${fmt(g,0)} g`;
@@ -824,7 +819,7 @@ function openRecipe(r){
   };
   wrap.querySelectorAll("#ateMode button").forEach(b => b.onclick = () => {
     mode = b.dataset.m; wrap.querySelectorAll("#ateMode button").forEach(x => x.setAttribute("aria-pressed", x === b));
-    q("#ateVal").value = mode === "pc" ? "1" : (t.portion ? fmt(t.portion.g,0) : "100"); calc();
+    q("#ateVal").value = mode === "g" ? (t.portion ? fmt(t.portion.g,0) : "100") : "1"; calc();
   });
   q("#ateVal").oninput = calc; calc();
   const h = new Date().getHours(); q("#ateMeal").value = h < 10 ? "Brokastis" : h < 14 ? "Pusdienas" : h < 17 ? "Launags" : h < 21 ? "Vakariņas" : "Uzkoda";
@@ -832,7 +827,7 @@ function openRecipe(r){
   q("#rcEdit").onclick = () => editRecipe(r);
   q("#ateAdd").onclick = async () => {
     const c = calc(); if (!c) { toast("Ievadi, cik apēda"); return; }
-    const label = mode === "pc" ? `${r.name} (${fmt(c.v,1)} gab.)` : r.name;
+    const label = mode === "pc" ? `${r.name} (${fmt(c.v,1)} gab.)` : mode === "all" && c.v !== 1 ? `${r.name} (${fmt(c.v,2)} no visa)` : r.name;
     const row = toRow({ kind: "meal", time: cur === todayStr() ? nowTime() : "", meal: q("#ateMeal").value,
       items: [{ n: label, g: Math.round(c.g), oh: Math.round(c.oh * 10) / 10 }], mv: Math.round(c.oh / gPerMv * 10) / 10, mv_est: false, note: "pēc receptes", bg: null, src: "recipe" });
     q("#ateAdd").disabled = true;
