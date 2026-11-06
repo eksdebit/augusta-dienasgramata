@@ -15,7 +15,7 @@ const LO = 3.9; let HI = 10;
 
 let booted = false, showCalcs = false, isAdmin = false;
 let user = null, memberships = [], child = null, role = null, members = {}, gPerMv = 12, penDays = 30, tabletG = null;
-let cur = todayStr(), entries = [], cgmDay = null, channel = null, view = "day";
+let cur = todayStr(), entries = [], channel = null, view = "day";
 let period = { from: shift(todayStr(), -6), to: todayStr() }, pEntries = [], pByDay = {}, pCgm = {};
 
 /* ---------- helpers ---------- */
@@ -250,15 +250,11 @@ async function loadDay(quiet){
   renderDate();
   if (!quiet) $("#log").innerHTML = `<div class="empty"><strong>Ielādē…</strong></div>`;
   const want = cur;
-  const [e, c] = await Promise.all([
-    sb.from("entries").select("*").eq("child_id", child.id).eq("date", want),
-    sb.from("cgm_days").select("t,v").eq("child_id", child.id).eq("date", want).maybeSingle()
-  ]);
+  const e = await sb.from("entries").select("*").eq("child_id", child.id).eq("date", want);
   if (want !== cur) return;
   if (e.error) { $("#log").innerHTML = `<div class="empty"><strong>Neizdevās ielādēt</strong>${esc(e.error.message)}</div>`; return; }
   entries = e.data || [];
-  cgmDay = c.data ? { t: c.data.t.map(Number), v: c.data.v.map(Number) } : null;
-  renderLog(); renderCgm();
+  renderLog();
 }
 $("#prev").onclick = () => { cur = shift(cur,-1); loadDay(); };
 $("#next").onclick = () => { cur = shift(cur,1); loadDay(); };
@@ -296,7 +292,6 @@ function lineFor(e, opts){
   const note = e.note ? `<div class="note">${esc(e.note)}</div>` : "";
   const GB = gLevel(e.bg); let bg = (k !== "glucose" && e.bg != null) ? ` <span class="bg ${GB[1]}">${GB[2]} cukurs ${fmt(e.bg,1)}</span>` : "";
   if (k !== "ketones" && e.ketones != null) { const L = ketLevel(e.ketones); bg += ` <span class="bg ket ${L ? L[1] : ""}">ketoni ${fmt(e.ketones,1)}</span>`; }
-  if (!opts || !opts.preview) { const dx = cgmNear(e.time); if (dx != null) bg += ` <span class="bg dex">Dexcom ${fmt(dx,1)}</span>`; }
   const who = (!opts || !opts.preview) && Object.keys(members).length > 1 && e.created_by && members[e.created_by] ? `<div class="who">pievienoja ${esc(members[e.created_by].display_name || members[e.created_by].email || "")}</div>` : "";
   return `<div class="tm">${esc(e.time||"—")}</div><div class="body"><div class="line1"><span class="chip">${KIND[k]||k}</span>${main}${bg}</div>${items}${note}${who}</div>`;
 }
@@ -337,12 +332,6 @@ function renderLog(){
 }
 
 /* ---------- Dexcom CGM ---------- */
-function cgmNear(time){
-  if (!cgmDay || !time) return null;
-  const [h,m] = time.split(":").map(Number); const t = h*60+m; let best = null, bd = 8;
-  cgmDay.t.forEach((x,i) => { const d = Math.abs(x-t); if (d < bd) { bd = d; best = cgmDay.v[i]; } });
-  return best;
-}
 function cgmStats(list){
   let all = []; list.forEach(c => { if (c && Array.isArray(c.v)) all = all.concat(c.v.map(Number)); });
   if (!all.length) return null; const n = all.length;
@@ -370,11 +359,19 @@ function cgmSvg(c, marks, P){
 }
 const PAL_PAGE = { band:"var(--ok-soft)", grid:"var(--rule)", muted:"var(--muted)", line:"var(--primary)", low:"var(--lo)", finger:"var(--caramel)", bg:"var(--sheet)" };
 const PAL_PRINT = { band:"#E3F2EC", grid:"#E8DED2", muted:"#5F6E71", line:"#087B83", low:"#C74646", finger:"#D98032", bg:"#ffffff" };
+let cgmShowAll = false;
 function renderCgm(){
-  const el = $("#cgmCard");
-  if (!cgmDay || !cgmDay.v.length) { el.hidden = true; el.innerHTML = ""; return; }
-  const S = cgmStats([cgmDay]); el.hidden = false;
-  el.innerHTML = `<div class="cgmhead"><b>Dexcom</b><span class="cgmline">vid. <strong>${fmt(S.avg,1)} mmol/l</strong> · diapazonā <strong>${fmt(S.tir,0)}%</strong> · zem 3,9 <strong>${fmt(S.lo,0)}%</strong> · virs ${fmt(HI,1)} <strong>${fmt(S.hi,0)}%</strong></span></div>${cgmSvg(cgmDay, fingerMarks(entries), PAL_PAGE)}<div class="cgmline">Zaļā josla 3,9–${fmt(HI,1)} mmol/l · oranžie punkti ir mērījumi no pirksta</div>`;
+  const el = $("#cgmList"), card = $("#cgmCard");
+  const days = Object.keys(pCgm).filter(d => pCgm[d] && pCgm[d].v.length).sort().reverse();
+  if (!days.length) { card.hidden = true; el.innerHTML = ""; return; }
+  card.hidden = false;
+  const LIM = 7, show = cgmShowAll ? days : days.slice(0, LIM);
+  el.innerHTML = show.map(d => { const S = cgmStats([pCgm[d]]);
+    return `<div class="cgm"><div class="cgmhead"><button type="button" class="cgmday" data-d="${d}">${shortDate(d)}</button><span class="cgmline">vid. <strong>${fmt(S.avg,1)}</strong> · diapazonā <strong>${fmt(S.tir,0)}%</strong> · zem 3,9 <strong>${fmt(S.lo,0)}%</strong> · virs ${fmt(HI,1)} <strong>${fmt(S.hi,0)}%</strong></span></div>${cgmSvg(pCgm[d], fingerMarks(pByDay[d] || []), PAL_PAGE)}</div>`; }).join("") +
+    `<p class="cgmline">Zaļā josla 3,9–${fmt(HI,1)} mmol/l · oranžie punkti ir mērījumi no pirksta</p>` +
+    (days.length > LIM ? `<button type="button" class="btn" id="cgmMore">${cgmShowAll ? "Rādīt mazāk" : `Rādīt visas ${days.length} dienas`}</button>` : "");
+  el.querySelectorAll("button[data-d]").forEach(b => b.onclick = () => { cur = b.dataset.d; setView("day"); loadDay(); });
+  const more = $("#cgmMore"); if (more) more.onclick = () => { cgmShowAll = !cgmShowAll; renderCgm(); };
 }
 function splitCsv(line,d){
   const out = []; let c = "", q = false;
@@ -745,7 +742,7 @@ async function loadPeriod(){
   if (e.error) { $("#statGrid").innerHTML = `<p class="hint">Neizdevās ielādēt periodu.</p>`; return; }
   pEntries = e.data || []; pByDay = {}; pEntries.forEach(x => (pByDay[x.date] = pByDay[x.date] || []).push(x));
   pCgm = {}; (c.data || []).forEach(x => pCgm[x.date] = { t: x.t.map(Number), v: x.v.map(Number) });
-  renderStats();
+  renderStats(); renderCgm();
 }
 
 /* sensitivity from real corrections: Apidra without food, glucose before and 75–240 min after */

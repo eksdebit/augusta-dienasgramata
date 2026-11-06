@@ -136,6 +136,8 @@ body.nodock .wrap{padding-bottom:calc(96px + var(--safe-b))}
 
 .cgm{background:var(--sheet);border:1px solid var(--rule);border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:6px}
 .cgm svg{width:100%;height:auto;display:block}
+.cgmlist{display:flex;flex-direction:column;gap:10px}
+.cgmday{background:none;border:0;padding:0;font:inherit;font-family:var(--display);font-weight:700;color:var(--primary-dark);text-decoration:underline;cursor:pointer}
 .cgmhead{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
 .cgmhead b{font-family:var(--display)}
 .cgmline{font-size:.85rem;color:var(--muted);font-variant-numeric:tabular-nums}
