@@ -11,7 +11,7 @@ const MON = ["janvāris","februāris","marts","aprīlis","maijs","jūnijs","jūl
 const KIND = { basal:"Ilgais insulīns", bolus:"Īsais insulīns", meal:"Ēdiens", glucose:"Cukurs", ketones:"Ketoni", tablets:"Glikozes tabl.", pen:"Insulīna maiņa", temp:"Temperatūra", med:"Zāles", note:"Piezīme" };
 const CONSENT_VERSION = "2026-11";
 const ROLE = { owner:"Īpašniece", family:"Ģimene", caregiver:"Aprūpētājs" };
-const LO = 3.9, HI = 10;
+const LO = 3.9; let HI = 10;
 
 let booted = false, showCalcs = false, isAdmin = false;
 let user = null, memberships = [], child = null, role = null, members = {}, gPerMv = 12, penDays = 30, tabletG = null;
@@ -176,7 +176,7 @@ function myDefaultName(){
 }
 
 async function loadMemberships(){
-  const { data, error } = await sb.from("members").select("child_id, role, display_name, children(name, g_per_mv, ai_enabled, pen_days, show_calcs, tablet_g)").eq("user_id", user.id);
+  const { data, error } = await sb.from("members").select("child_id, role, display_name, children(name, g_per_mv, ai_enabled, pen_days, show_calcs, tablet_g, range_hi)").eq("user_id", user.id);
   memberships = error ? [] : (data || []);
 }
 
@@ -204,7 +204,7 @@ async function selectChild(id){
   const m = memberships.find(x => x.child_id === id);
   child = { id, name: m.children.name, ai: !!m.children.ai_enabled };
   $("#photoRow").hidden = !child.ai;
-  $("#hint").hidden = true; $("#mic").hidden = true; role = m.role; gPerMv = num(m.children.g_per_mv) || 12; penDays = num(m.children.pen_days) || 30; showCalcs = !!m.children.show_calcs; tabletG = num(m.children.tablet_g);
+  $("#hint").hidden = true; $("#mic").hidden = true; role = m.role; gPerMv = num(m.children.g_per_mv) || 12; penDays = num(m.children.pen_days) || 30; showCalcs = !!m.children.show_calcs; tabletG = num(m.children.tablet_g); HI = num(m.children.range_hi) || 10;
   try { localStorage.setItem("child", id); } catch (_) {}
   $("#childName").textContent = child.name;
   $("#roleLabel").textContent = (m.display_name ? m.display_name + " · " : "") + ROLE[role];
@@ -277,8 +277,8 @@ function withMv(e){
   return e;
 }
 function ketLevel(v){ v = num(v); if (v == null) return null; return v >= 3 ? ["⚠ ļoti augsti","k3"] : v >= 1.5 ? ["⚠ augsti","k2"] : v >= 0.6 ? ["▲ paaugstināti","k1"] : null; }
-// glucose ranges: below 3.9 low, 3.9–10 in range, above 10 high — always with a symbol and a word, not colour alone
-function gLevel(v){ v = num(v); if (v == null) return null; return v < 3.9 ? ["▼ zems","lo","▼"] : v > 10 ? ["▲ augsts","hi","▲"] : ["✓ diapazonā","ok","✓"]; }
+// glucose ranges: below LO low, LO–HI in range (HI per family), above HI high — always with a symbol and a word, not colour alone
+function gLevel(v){ v = num(v); if (v == null) return null; return v < LO ? ["▼ zems","lo","▼"] : v > HI ? ["▲ augsts","hi","▲"] : ["✓ diapazonā","ok","✓"]; }
 function lineFor(e, opts){
   const k = e.kind || "note"; let main = "";
   if (k === "basal" || k === "bolus") main = `<span class="big">${esc(e.insulin||"")} ${fmt(e.units)} v</span>`;
@@ -374,7 +374,7 @@ function renderCgm(){
   const el = $("#cgmCard");
   if (!cgmDay || !cgmDay.v.length) { el.hidden = true; el.innerHTML = ""; return; }
   const S = cgmStats([cgmDay]); el.hidden = false;
-  el.innerHTML = `<div class="cgmhead"><b>Dexcom</b><span class="cgmline">vid. <strong>${fmt(S.avg,1)} mmol/l</strong> · diapazonā <strong>${fmt(S.tir,0)}%</strong> · zem 3,9 <strong>${fmt(S.lo,0)}%</strong> · virs 10 <strong>${fmt(S.hi,0)}%</strong></span></div>${cgmSvg(cgmDay, fingerMarks(entries), PAL_PAGE)}<div class="cgmline">Zaļā josla 3,9–10 mmol/l · oranžie punkti ir mērījumi no pirksta</div>`;
+  el.innerHTML = `<div class="cgmhead"><b>Dexcom</b><span class="cgmline">vid. <strong>${fmt(S.avg,1)} mmol/l</strong> · diapazonā <strong>${fmt(S.tir,0)}%</strong> · zem 3,9 <strong>${fmt(S.lo,0)}%</strong> · virs ${fmt(HI,1)} <strong>${fmt(S.hi,0)}%</strong></span></div>${cgmSvg(cgmDay, fingerMarks(entries), PAL_PAGE)}<div class="cgmline">Zaļā josla 3,9–${fmt(HI,1)} mmol/l · oranžie punkti ir mērījumi no pirksta</div>`;
 }
 function splitCsv(line,d){
   const out = []; let c = "", q = false;
@@ -814,7 +814,7 @@ function renderStats(){
     (() => { const m = median(S.isfEv.map(x => x.isf)); const isfUse = S.isf != null ? S.isf : m; const g = S.perMv && isfUse ? (gPerMv/S.perMv) / isfUse : null; const gReal = S.perMv && m ? (gPerMv/S.perMv) / m : null; return st(g != null ? fmt(g,1)+" g" : "—", "Glikoze uz +1 mmol/l",
       g != null ? "cik g tīras glikozes paaugstina cukuru par 1 mmol/l" + (tabletG ? ` (≈ ${fmt(g/tabletG,1)} tabl. pa ${fmt(tabletG,1)} g)` : "") + " · OH uz 1 v ÷ jutība" + (gReal != null && Math.abs(gReal - g) >= 0.1 ? ` · pēc korekcijām: ${fmt(gReal,1)} g` : "") : "cik g tīras glikozes paaugstina cukuru par 1 mmol/l · vajag MV un insulīna ierakstus"); })() : "") +
     st(S.gAvg!=null ? fmt(S.gAvg,1)+" mmol/l" : "", "Vid. cukurs no pirksta", S.gN ? S.gN+" mērījumi" : "Nav mērījumu") +
-    (S.cgm ? st(fmt(S.cgm.tir,0)+"%", "Dexcom: laiks diapazonā", "3,9–10 mmol/l", true) + st(fmt(S.cgm.avg,1)+" mmol/l", "Dexcom vidējais", `zem 3,9: ${fmt(S.cgm.lo,0)}% · virs 10: ${fmt(S.cgm.hi,0)}%`)
+    (S.cgm ? st(fmt(S.cgm.tir,0)+"%", "Dexcom: laiks diapazonā", `3,9–${fmt(HI,1)} mmol/l`, true) + st(fmt(S.cgm.avg,1)+" mmol/l", "Dexcom vidējais", `zem 3,9: ${fmt(S.cgm.lo,0)}% · virs ${fmt(HI,1)}: ${fmt(S.cgm.hi,0)}%`)
            : st("", "Dexcom dati", "nav importēti šim periodam"));
   const rows = S.per.map(p => `<tr><td><button type="button" data-d="${p.date}">${shortDate(p.date)}</button></td><td>${fmt(p.bas)}</td><td>${fmt(p.bol)}</td><td>${fmt(p.tdd)}</td><td>${fmt(p.mv,1)}</td>${showCalcs ? `<td>${p.mv>0&&p.bol>0?fmt(p.bol/p.mv,2):""}</td>` : ""}<td>${fmt(p.tab)}</td><td>${p.cgm?fmt(p.cgm.tir,0)+"%":""}</td></tr>`).join("");
   $("#dayTable").innerHTML = `<thead><tr><th>Diena</th><th>Ilgais v</th><th>Īsais v</th><th>Kopā v</th><th>MV</th>${showCalcs ? "<th>v/MV</th>" : ""}<th>Tab.</th><th>Diap.</th></tr></thead><tbody>${rows || `<tr><td colspan="8">Šajā periodā nav ierakstu</td></tr>`}</tbody>`;
@@ -827,7 +827,7 @@ function printHTML(from, to, byDay, cgm){
   const S = periodStats();
   const dayHTML = S.days.map(d => {
     const list = sortE(byDay[d] || []); const t = dayTotals(list); const cs = cgmStats([cgm[d]]);
-    const chart = cs ? `<div class="chart">${cgmSvg(cgm[d], fingerMarks(list), PAL_PRINT)}<div class="cs">Dexcom: vid. ${fmt(cs.avg,1)} mmol/l · diapazonā ${fmt(cs.tir,0)}% · zem 3,9 ${fmt(cs.lo,0)}% · virs 10 ${fmt(cs.hi,0)}% · min ${fmt(cs.min,1)} / max ${fmt(cs.max,1)}</div></div>` : "";
+    const chart = cs ? `<div class="chart">${cgmSvg(cgm[d], fingerMarks(list), PAL_PRINT)}<div class="cs">Dexcom: vid. ${fmt(cs.avg,1)} mmol/l · diapazonā ${fmt(cs.tir,0)}% · zem 3,9 ${fmt(cs.lo,0)}% · virs ${fmt(HI,1)} ${fmt(cs.hi,0)}% · min ${fmt(cs.min,1)} / max ${fmt(cs.max,1)}</div></div>` : "";
     const rows = list.map(e => {
       const what = e.kind === "meal" ? `<b>${esc(e.meal)}</b><br>` + (e.items||[]).map(i => `${esc(i.n)}${i.g!=null ? ` <span class="g">${fmt(i.g,0)} g</span>` : ""}`).join("<br>")
         : esc(entryText(e).replace(/ — .*$/,"").replace(/ \[(cukurs|ketoni) [^\]]*\]/g,""));
@@ -841,7 +841,7 @@ function printHTML(from, to, byDay, cgm){
   }).join("");
   const box = (v,l) => `<div><b>${v || "—"}</b><span>${l}</span></div>`;
   return `<div class="pr"><h1>${esc(child.name)} · Cukuriņa pieraksti</h1><div class="sub">${from === to ? esc(prettyDate(from)) : esc(prettyDate(from)) + " – " + esc(prettyDate(to))}</div>
-    ${from === to ? "" : `<div class="pstats">${box(S.tdd!=null?fmt(S.tdd,1)+" v":"", "Vid. kopējā deva dienā")}${box(S.bas!=null?fmt(S.bas,1)+" v":"", "Vid. ilgais")}${box(S.bol!=null?fmt(S.bol,1)+" v":"", "Vid. īsais")}${box(S.mv!=null?fmt(S.mv,1)+" MV":"", "Vid. MV dienā")}${showCalcs ? box(S.perMv!=null?fmt(S.perMv,2)+" v":"", "Īsais uz 1 MV") + (() => { const m = median(S.isfEv.map(x => x.isf)); return box(S.isf!=null?fmt(S.isf,1)+" mmol/l":"", "Jutība uz 1 v (100 ÷ dienas deva)" + (m!=null ? "; pēc korekcijām " + fmt(m,1) : "")); })() : box(S.gAvg!=null?fmt(S.gAvg,1)+" mmol/l":"", "Vid. cukurs no pirksta")}${box(S.cgm?fmt(S.cgm.tir,0)+"%":"", "Dexcom diapazonā 3,9–10")}${box(S.cgm?fmt(S.cgm.avg,1)+" mmol/l":(S.gAvg!=null?fmt(S.gAvg,1)+" mmol/l":""), S.cgm ? "Dexcom vidējais" : "Vid. cukurs no pirksta")}</div>`}
+    ${from === to ? "" : `<div class="pstats">${box(S.tdd!=null?fmt(S.tdd,1)+" v":"", "Vid. kopējā deva dienā")}${box(S.bas!=null?fmt(S.bas,1)+" v":"", "Vid. ilgais")}${box(S.bol!=null?fmt(S.bol,1)+" v":"", "Vid. īsais")}${box(S.mv!=null?fmt(S.mv,1)+" MV":"", "Vid. MV dienā")}${showCalcs ? box(S.perMv!=null?fmt(S.perMv,2)+" v":"", "Īsais uz 1 MV") + (() => { const m = median(S.isfEv.map(x => x.isf)); return box(S.isf!=null?fmt(S.isf,1)+" mmol/l":"", "Jutība uz 1 v (100 ÷ dienas deva)" + (m!=null ? "; pēc korekcijām " + fmt(m,1) : "")); })() : box(S.gAvg!=null?fmt(S.gAvg,1)+" mmol/l":"", "Vid. cukurs no pirksta")}${box(S.cgm?fmt(S.cgm.tir,0)+"%":"", "Dexcom diapazonā 3,9–" + fmt(HI,1))}${box(S.cgm?fmt(S.cgm.avg,1)+" mmol/l":(S.gAvg!=null?fmt(S.gAvg,1)+" mmol/l":""), S.cgm ? "Dexcom vidējais" : "Vid. cukurs no pirksta")}</div>`}
     <div class="pdisc">${showCalcs ? "Aprēķini ir aptuveni un domāti sarunai ar endokrinologu. " : ""}1 MV = ${fmt(gPerMv)} g ogļhidrātu. “≈” — MV aprēķinātas no ēdienu sastāva.</div>
     ${dayHTML || "<p>Šajā periodā nav ierakstu.</p>"}</div>`;
 }
@@ -874,6 +874,7 @@ async function renderFamily(){
   $("#showCalcs").checked = showCalcs; $("#showCalcs").disabled = role !== "owner";
   $("#adminCard").hidden = !isAdmin; if (isAdmin) renderAdmin();
   $("#tabletG").value = tabletG != null ? fmt(tabletG,1) : ""; $("#tabletG").disabled = role !== "owner";
+  $("#rangeHi").value = fmt(HI,1); $("#rangeHi").disabled = role !== "owner";
   const ml = $("#memberList"); ml.innerHTML = "";
   Object.values(members).sort((a,b) => ["owner","family","caregiver"].indexOf(a.role) - ["owner","family","caregiver"].indexOf(b.role)).forEach(m => {
     const li = document.createElement("li");
@@ -928,8 +929,10 @@ $("#saveSettings").onclick = async () => {
     const sc = $("#showCalcs").checked;
     const tg = num($("#tabletG").value);
     if (tg != null && (tg <= 0 || tg > 20)) { toast("Tabletes svaram jābūt no 0,1 līdz 20 g"); return; }
-    const { error } = await sb.from("children").update({ g_per_mv: v, pen_days: pd, show_calcs: sc, tablet_g: tg }).eq("id", child.id);
-    if (!error) { gPerMv = v; penDays = pd; showCalcs = sc; tabletG = tg; }
+    const rh = num($("#rangeHi").value);
+    if (!rh || rh < 6 || rh > 20) { toast("Diapazona augšējai robežai jābūt no 6 līdz 20 mmol/l"); return; }
+    const { error } = await sb.from("children").update({ g_per_mv: v, pen_days: pd, show_calcs: sc, tablet_g: tg, range_hi: rh }).eq("id", child.id);
+    if (!error) { gPerMv = v; penDays = pd; showCalcs = sc; tabletG = tg; HI = rh; }
   }
   await loadMemberships(); const m = memberships.find(x => x.child_id === child.id);
   $("#roleLabel").textContent = (m && m.display_name ? m.display_name + " · " : "") + ROLE[role];
