@@ -99,6 +99,19 @@ Atbildi TIKAI ar JSON: {"ketones": skaitlis vai null, "time": "HH:MM" vai null, 
 Ja ekrānā ir LO, HI vai tas izskatās pēc glikozes mērījuma, nevis ketoniem, atgriez ketones null un error ar paskaidrojumu.`;
 }
 
+function labelPrompt() {
+  return `Attēlā ir pārtikas produkta iepakojums ar uzturvērtību tabulu (bērna 1. tipa diabēta dienasgrāmatai, ogļhidrātu skaitīšanai).
+Nolasi:
+- name: produkta nosaukums latviski, īsi (zīmols + produkts, ja redzams; ja nosaukums nav redzams, null).
+- oh100: rinda "Ogļhidrāti" (Carbohydrate, Kohlenhydrate, Углеводы, Angliavandeniai, Süsivesikud) kolonnā "uz 100 g" vai "uz 100 ml". Tas ir KOPĒJAIS ogļhidrātu daudzums, NEVIS rinda "tostarp cukuri" un nevis šķiedrvielas.
+- basis: "100 g" vai "100 ml" — kam vērtība dota.
+- prepared: true, ja kolonna skaidri attiecas uz pagatavotu produktu ("pagatavotam", "prepared", "as consumed"); false, ja tā ir produktam, kāds tas ir iepakojumā; null, ja nav saprotams.
+- Ja tabulā ir tikai vērtība vienai porcijai un porcijas svars ir redzams, pārrēķini uz 100 g un piezīmē "note" uzraksti, kā rēķināji. Ja porcijas svars nav redzams, oh100 = null un error.
+- Ja ir vairākas kolonnas, ņem "uz 100 g" kolonnu produktam, kāds tas ir iepakojumā.
+- Nekad nemini un nenovērtē pēc tipiskām vērtībām. Ja skaitli nevar droši salasīt (izplūdis, atspīdums, nogriezts), oh100 = null un error ar īsu paskaidrojumu latviski.
+Atbildi TIKAI ar JSON: {"name": "..." vai null, "oh100": skaitlis vai null, "basis": "100 g" vai "100 ml" vai null, "prepared": true/false/null, "note": null vai īsa piezīme latviski, "error": null vai īss paskaidrojums latviski}.
+Ja attēlā nav uzturvērtību tabulas, atgriez oh100 null un error.`;
+}
 
 // Count recognition calls per user (no content) so the app owner can see usage and costs
 function callerId(auth: string): string | null {
@@ -131,11 +144,11 @@ Deno.serve(async (req) => {
   try { b = await req.json(); } catch { return json({ error: "Slikts pieprasījums" }, 400); }
   const mode = b.mode || "text";
   const content: unknown[] = [];
-  if (mode === "menu" || mode === "meter" || mode === "ketones" || mode === "notes") {
+  if (mode === "menu" || mode === "meter" || mode === "ketones" || mode === "notes" || mode === "label") {
     if (!b.image || b.image.length > 7_000_000) return json({ error: "Attēls nav pievienots vai ir par lielu" }, 400);
     content.push({ type: "image", source: { type: "base64", media_type: b.mediaType || "image/jpeg", data: b.image } });
   }
-  content.push({ type: "text", text: mode === "menu" ? menuPrompt(b) : mode === "notes" ? notesPrompt(b) : mode === "meter" ? meterPrompt() : mode === "ketones" ? ketonePrompt() : textPrompt(b) });
+  content.push({ type: "text", text: mode === "menu" ? menuPrompt(b) : mode === "notes" ? notesPrompt(b) : mode === "meter" ? meterPrompt() : mode === "ketones" ? ketonePrompt() : mode === "label" ? labelPrompt() : textPrompt(b) });
 
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",

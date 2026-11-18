@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Nunito:wght@700;800;900&display=swap">
-<link rel="stylesheet" href="app.css?v=31">
+<link rel="stylesheet" href="app.css?v=32">
 </head>
 <body>
 <div id="app">
@@ -25,7 +25,7 @@
   <!-- ===== sign in ===== -->
   <section id="scrAuth" class="screen center" hidden>
     <div class="authbox">
-      <img src="icons/icon-192.png?v=31" alt="" class="authlogo" width="96" height="96">
+      <img src="icons/icon-192.png?v=32" alt="" class="authlogo" width="96" height="96">
       <h1 class="brand">Cukuriņa pieraksti</h1>
       <p class="muted" id="authInviteNote" hidden>Tev ir ielūgums uz dienasgrāmatu. Pieslēdzies vai izveido kontu, un tas tiks pieņemts.</p>
       <div class="seg" role="tablist">
@@ -47,7 +47,7 @@
   <!-- ===== privacy consent (once per version) ===== -->
   <section id="scrConsent" class="screen center" hidden>
     <div class="authbox">
-      <img src="icons/icon-192.png?v=31" alt="" class="authlogo" width="96" height="96">
+      <img src="icons/icon-192.png?v=32" alt="" class="authlogo" width="96" height="96">
       <h1 class="brand">Privātums</h1>
       <p>Cukuriņa pieraksti glabā bērna veselības datus: insulīna devas, ēdienreizes, glikozes un ketonu mērījumus, piezīmes. Tos redz tikai tie, ko pats uzaicini.</p>
       <p><a href="privatums.html" target="_blank" rel="noopener">Izlasīt privātuma paziņojumu</a></p>
@@ -61,7 +61,7 @@
   <!-- ===== first run ===== -->
   <section id="scrOnboard" class="screen center" hidden>
     <div class="authbox">
-      <img src="icons/icon-192.png?v=31" alt="" class="authlogo" width="96" height="96">
+      <img src="icons/icon-192.png?v=32" alt="" class="authlogo" width="96" height="96">
       <h1 class="brand">Sāksim dienasgrāmatu</h1>
       <form id="obForm" class="form">
         <label>Bērna vārds<input id="obChild" required></label>
@@ -81,7 +81,7 @@
   <!-- ===== main app ===== -->
   <section id="scrMain" class="screen" hidden>
     <header class="topbar">
-      <img src="icons/icon-192.png?v=31" alt="" width="36" height="36" class="toplogo">
+      <img src="icons/icon-192.png?v=32" alt="" width="36" height="36" class="toplogo">
       <div class="toptitle"><b id="childName">Augusts</b><span id="roleLabel"></span></div>
       <select id="childSel" aria-label="Dienasgrāmata" hidden></select>
     </header>
@@ -157,9 +157,13 @@
           <h2>Receptes</h2>
           <button class="btn primary" id="recNew" type="button">+ Jauna recepte</button>
         </div>
-        <input id="recSearch" type="search" placeholder="Meklēt recepti…" aria-label="Meklēt recepti">
+        <div class="seg" role="tablist" id="recTabs">
+          <button type="button" class="segb" data-k="recipe" aria-selected="true">Receptes</button>
+          <button type="button" class="segb" data-k="product" aria-selected="false">Produkti</button>
+        </div>
+        <input id="recSearch" type="search" placeholder="Meklēt receptēs un produktos…" aria-label="Meklēt receptēs un produktos">
         <div id="recList" class="reclist"></div>
-        <p class="hint">Ogļhidrāti uz 100 g pie sastāvdaļām ir aptuveni. Ja uz iepakojuma ir cits skaitlis, ieraksti to.</p>
+        <p class="hint" id="recHint">Ogļhidrāti uz 100 g pie sastāvdaļām ir aptuveni. Ja uz iepakojuma ir cits skaitlis, ieraksti to.</p>
       </div>
 
       <!-- FAMILY -->
@@ -238,7 +242,7 @@
 <div id="printArea" aria-hidden="true"></div>
 
 <script src="vendor/supabase-2.45.4.js"></script>
-<script src="config.js?v=31"></script>
-<script src="app.js?v=31"></script>
+<script src="config.js?v=32"></script>
+<script src="app.js?v=32"></script>
 </body>
 </html>

@@ -970,7 +970,26 @@ const OH100 = {
   "banāns":21,"ābols":12,"bumbieris":12,"zemenes":6,"mellenes":10,"avenes":5,"burkāns":7,"ķirbis":6,"cukini":3,"tomāts":3,
   "rīvmaize":72,"baltmaize":49,"rudzu maize":45,"kartupeļu ciete":83,"kukurūzas ciete":88,"cepamais pulveris":28,"sāls":0,"raugs":0,"ūdens":0
 };
-let recipes = [], recEditing = null;
+let recipes = [], recEditing = null, recKind = "recipe";
+// Starter products: carbs per 100 g as eaten. Reference tables disagree (cooking time changes how much water is absorbed), so these are saved as approximate.
+const STARTER = [
+  { name: "Vārīti rīsi", oh100: 28, note: "Aptuveni: tabulās 25–31 g OH uz 100 g, atkarīgs no šķirnes un vārīšanas ilguma. Precīzāk: “Aprēķināt no svara”." },
+  { name: "Vārīti griķi", oh100: 21, note: "Aptuveni: tabulās 17–24 g OH uz 100 g, atkarīgs no ūdens daudzuma. Precīzāk: “Aprēķināt no svara”." },
+  { name: "Vārīti makaroni", oh100: 28, note: "Aptuveni: tabulās 22–35 g OH uz 100 g. Jo ilgāk vāra, jo vairāk ūdens un mazāk OH uz 100 g. Precīzāk: “Aprēķināt no svara”." },
+  { name: "Vārīti kartupeļi", oh100: 17, note: "Aptuveni: tabulās 15–18 g OH uz 100 g, atkarīgs no šķirnes." },
+  { name: "Kartupeļu biezenis", oh100: 15, note: "Aptuveni: tabulās 15–16 g OH uz 100 g, atkarīgs no piena un sviesta daudzuma." }
+];
+const CAM_SVG = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>`;
+function isProd(r){ return r && r.kind === "product"; }
+// Product carbs per 100 g as eaten: either entered directly, or dry weight × dry carbs ÷ cooked weight
+function prodPer100(r){
+  const it = (r.items || [])[0];
+  if (it) {
+    const g = num(it.g), p = num(it.oh100), c = num(r.cooked_g);
+    return g && p != null && c ? g * p / c : null;
+  }
+  return num(r.oh100);
+}
 function ohGuess(name){
   const n = String(name||"").toLowerCase().trim(); if (!n) return null;
   if (OH100[n] != null) return OH100[n];
@@ -997,24 +1016,238 @@ async function loadRecipes(){
 }
 function renderRecipes(){
   const q = ($("#recSearch").value || "").trim().toLowerCase();
-  const list = recipes.filter(r => !q || r.name.toLowerCase().includes(q));
+  const mine = recipes.filter(r => (r.kind || "recipe") === recKind);
+  const list = q ? recipes.filter(r => r.name.toLowerCase().includes(q)) : mine;
+  const prodTab = recKind === "product";
+  $("#recNew").textContent = prodTab ? "+ Jauns produkts" : "+ Jauna recepte";
+  document.querySelectorAll("#recTabs .segb").forEach(b => b.setAttribute("aria-selected", b.dataset.k === recKind));
+  $("#recHint").textContent = prodTab
+    ? "Vārītiem produktiem OH uz 100 g mainās atkarībā no tā, cik ūdens tie uzsūc. Precīzāk ir nosvērt sauso un gatavo produktu (“Aprēķināt no svara”)."
+    : "Ogļhidrāti uz 100 g pie sastāvdaļām ir aptuveni. Ja uz iepakojuma ir cits skaitlis, ieraksti to.";
   const box = $("#recList"); box.innerHTML = "";
-  if (!recipes.length) { box.innerHTML = `<div class="empty"><strong>Vēl nav nevienas receptes</strong>Spied “+ Jauna recepte” un ievadi, piemēram, pankūkas: sastāvdaļas ar gramiem, cik gabalu sanāca un porcijas lielumu.</div>`; return; }
+  if (!q && !mine.length) {
+    if (!prodTab) { box.innerHTML = `<div class="empty"><strong>Vēl nav nevienas receptes</strong>Spied “+ Jauna recepte” un ievadi, piemēram, pankūkas: sastāvdaļas ar gramiem, cik gabalu sanāca un porcijas lielumu.</div>`; return; }
+    box.innerHTML = `<div class="empty"><strong>Vēl nav neviena produkta</strong>Šeit glabājas produkti, ko ēd bez receptes: vārīti rīsi, griķi, makaroni, kartupeļi, maize, jogurts. Spied “+ Jauns produkts” un ieraksti OH uz 100 g vai nofotografē iepakojumu.</div>
+      <button class="btn" id="recStarter" type="button">Pievienot sākuma sarakstu (rīsi, griķi, makaroni, kartupeļi)</button>`;
+    $("#recStarter").onclick = async () => {
+      $("#recStarter").disabled = true;
+      const { error } = await sb.from("recipes").insert(STARTER.map(p => ({ child_id: child.id, kind: "product", name: p.name, oh100: p.oh100, note: p.note, approx: true, items: [] })));
+      if (error) { $("#recStarter").disabled = false; toast("Neizdevās pievienot: " + error.message); return; }
+      toast("Sākuma saraksts pievienots"); loadRecipes();
+    };
+    return;
+  }
   if (!list.length) { box.innerHTML = `<p class="hint">Nekas neatrasts.</p>`; return; }
   list.forEach(r => {
-    const t = recTotals(r);
     const b = document.createElement("button"); b.type = "button"; b.className = "reccard";
-    b.innerHTML = `<b>${esc(r.name)}</b><div class="recnums">
-      ${t.per100 != null ? `<span class="recnum oh">${fmt(t.per100,1)} g OH / 100 g</span>` : ""}
-      ${t.piece ? `<span class="recnum">1 gab. ≈ ${fmt(t.piece.mv,1)} MV</span>` : ""}
-      ${t.portion ? `<span class="recnum">porcija ${fmt(t.portion.g,0)} g ≈ ${fmt(t.portion.mv,1)} MV</span>` : ""}
-      <span class="recnum">viss ēdiens ${fmt(t.mv,1)} MV</span></div>`;
-    b.onclick = () => openRecipe(r);
+    if (isProd(r)) {
+      const p = prodPer100(r), por = num(r.portion_g), pg = num(r.piece_g);
+      b.innerHTML = `<b>${esc(r.name)}</b><div class="recnums">
+        ${q ? `<span class="recnum kind">Produkts</span>` : ""}
+        ${p != null ? `<span class="recnum oh">${fmt(p,1)} g OH / 100 g</span>` : `<span class="recnum warn">OH nav norādīti</span>`}
+        ${p > 0 ? `<span class="recnum">1 MV = ${fmt(gPerMv / p * 100,0)} g</span>` : ""}
+        ${p != null && por ? `<span class="recnum">porcija ${fmt(por,0)} g ≈ ${fmt(p * por / 100 / gPerMv,1)} MV</span>` : ""}
+        ${p != null && pg ? `<span class="recnum">1 gab. ≈ ${fmt(p * pg / 100 / gPerMv,1)} MV</span>` : ""}
+        ${r.approx ? `<span class="recnum warn">aptuveni</span>` : ""}</div>`;
+      b.onclick = () => openProduct(r);
+    } else {
+      const t = recTotals(r);
+      b.innerHTML = `<b>${esc(r.name)}</b><div class="recnums">
+        ${q ? `<span class="recnum kind">Recepte</span>` : ""}
+        ${t.per100 != null ? `<span class="recnum oh">${fmt(t.per100,1)} g OH / 100 g</span>` : ""}
+        ${t.piece ? `<span class="recnum">1 gab. ≈ ${fmt(t.piece.mv,1)} MV</span>` : ""}
+        ${t.portion ? `<span class="recnum">porcija ${fmt(t.portion.g,0)} g ≈ ${fmt(t.portion.mv,1)} MV</span>` : ""}
+        <span class="recnum">viss ēdiens ${fmt(t.mv,1)} MV</span></div>`;
+      b.onclick = () => openRecipe(r);
+    }
     box.appendChild(b);
   });
 }
 $("#recSearch").addEventListener("input", renderRecipes);
-$("#recNew").onclick = () => editRecipe(null);
+$("#recNew").onclick = () => recKind === "product" ? editProduct(null) : editRecipe(null);
+document.querySelectorAll("#recTabs .segb").forEach(b => b.onclick = () => { recKind = b.dataset.k; renderRecipes(); });
+
+/* ---------- products: single foods with carbs per 100 g as eaten ---------- */
+function openProduct(r){
+  const p = prodPer100(r), pg = num(r.piece_g), por = num(r.portion_g), it = (r.items || [])[0];
+  const wrap = document.createElement("div"); wrap.className = "sheet-bg";
+  wrap.innerHTML = `<div class="sheet" role="dialog" aria-label="${esc(r.name)}">
+    <h2>${esc(r.name)}</h2>
+    <div class="calcbox">
+      <div class="calc"><b>${p != null ? fmt(p,1) + " g" : "—"}</b><span>OH uz 100 g, kā ēd</span></div>
+      <div class="calc"><b>${p > 0 ? fmt(gPerMv / p * 100,0) + " g" : "—"}</b><span>= 1 MV</span></div>
+      ${p != null && por ? `<div class="calc"><b>${fmt(p * por / 100 / gPerMv,1)} MV</b><span>porcija ${fmt(por,0)} g · ${fmt(p * por / 100,1)} g OH</span></div>` : ""}
+      ${p != null && pg ? `<div class="calc"><b>${fmt(p * pg / 100 / gPerMv,1)} MV</b><span>1 gab. ≈ ${fmt(pg,0)} g · ${fmt(p * pg / 100,1)} g OH</span></div>` : ""}
+    </div>
+    ${r.approx ? `<p class="disc">Vērtība ir aptuvena, no vispārīgām tabulām. Pārbaudi to ar iepakojumu vai nosver sauso un gatavo produktu, tad labojot noņem atzīmi “aptuvena”.</p>` : ""}
+    <div class="card" style="padding:12px">
+      <h2 style="font-size:1rem">Cik apēda?</h2>
+      ${pg ? `<div class="seg2" id="ateMode"><button type="button" data-m="g" aria-pressed="true">Grami</button><button type="button" data-m="pc" aria-pressed="false">Gabali</button></div>` : ""}
+      <div class="ate">
+        <label><span id="ateLbl">Grami</span><input id="ateVal" inputmode="decimal" value="${por ? fmt(por,0) : "100"}"></label>
+        <div class="calc hl"><b id="ateMv">—</b><span id="ateOh"></span></div>
+      </div>
+      <label>Ēdienreize<select id="ateMeal"><option>Brokastis</option><option>Pusdienas</option><option>Launags</option><option>Vakariņas</option><option selected>Uzkoda</option></select></label>
+      <button class="btn primary" id="ateAdd" type="button">Pievienot dienasgrāmatai (${esc(prettyDate(cur))})</button>
+    </div>
+    ${it ? `<p class="hint">Aprēķināts no svara: ${fmt(it.g,0)} g sausā veidā (${fmt(it.oh100,1)} g OH/100 g) → ${fmt(r.cooked_g,0)} g gatavā veidā.</p>` : ""}
+    ${r.note ? `<p class="recnote">${esc(r.note)}</p>` : ""}
+    <div class="rowbtns">
+      <button class="btn" id="rcClose" type="button">Aizvērt</button>
+      <button class="btn" id="rcEdit" type="button">Labot produktu</button>
+    </div>
+  </div>`;
+  $("#sheetHost").innerHTML = ""; $("#sheetHost").appendChild(wrap);
+  const q = s => wrap.querySelector(s);
+  let mode = "g";
+  const calc = () => {
+    q("#ateLbl").textContent = mode === "pc" ? "Gabali" : "Grami";
+    const v = num(q("#ateVal").value);
+    if (p == null || v == null || v <= 0) { q("#ateMv").textContent = "—"; q("#ateOh").textContent = ""; return null; }
+    const g = mode === "pc" ? v * pg : v, oh = p * g / 100;
+    q("#ateMv").textContent = (r.approx ? "≈ " : "") + fmt(oh / gPerMv, 1) + " MV";
+    q("#ateOh").textContent = `${fmt(oh,1)} g OH${mode === "pc" ? " · ≈ " + fmt(g,0) + " g" : ""}`;
+    return { g, oh, v };
+  };
+  wrap.querySelectorAll("#ateMode button").forEach(b => b.onclick = () => {
+    mode = b.dataset.m; wrap.querySelectorAll("#ateMode button").forEach(x => x.setAttribute("aria-pressed", x === b));
+    q("#ateVal").value = mode === "pc" ? "1" : (por ? fmt(por,0) : "100"); calc();
+  });
+  q("#ateVal").oninput = calc; calc();
+  const h = new Date().getHours(); q("#ateMeal").value = h < 10 ? "Brokastis" : h < 14 ? "Pusdienas" : h < 17 ? "Launags" : h < 21 ? "Vakariņas" : "Uzkoda";
+  q("#rcClose").onclick = closeSheet;
+  q("#rcEdit").onclick = () => editProduct(r);
+  q("#ateAdd").onclick = async () => {
+    const c = calc(); if (!c) { toast(p == null ? "Produktam nav norādīti ogļhidrāti" : "Ievadi, cik apēda"); return; }
+    const label = mode === "pc" ? `${r.name} (${fmt(c.v,1)} gab.)` : r.name;
+    const row = toRow({ kind: "meal", time: cur === todayStr() ? nowTime() : "", meal: q("#ateMeal").value,
+      items: [{ n: label, g: Math.round(c.g), oh: Math.round(c.oh * 10) / 10 }], mv: Math.round(c.oh / gPerMv * 10) / 10, mv_est: !!r.approx,
+      note: r.approx ? "pēc produktu saraksta, OH aptuveni" : "pēc produktu saraksta", bg: null, src: "recipe" });
+    q("#ateAdd").disabled = true;
+    const { error } = await sb.from("entries").insert(row);
+    if (error) { q("#ateAdd").disabled = false; toast("Neizdevās saglabāt: " + error.message); return; }
+    closeSheet(); toast("Pievienots dienasgrāmatai"); setView("day"); loadDay(true);
+  };
+}
+
+function editProduct(r){
+  const isNew = !r;
+  r = r || { name: "", items: [], oh100: null, cooked_g: null, piece_g: null, portion_g: null, note: "", approx: false };
+  const it = (r.items || [])[0] || {};
+  let mode = (r.items || []).length ? "w" : "k";
+  const wrap = document.createElement("div"); wrap.className = "sheet-bg";
+  wrap.innerHTML = `<div class="sheet" role="dialog" aria-label="Produkts">
+    <h2>${isNew ? "Jauns produkts" : "Labot produktu"}</h2>
+    ${child.ai ? `<input type="file" id="pFile" accept="image/*" hidden>
+    <button class="btn" id="pPhoto" type="button">${CAM_SVG} Fotografēt iepakojumu</button>
+    <div class="photoask" id="pAsk" hidden></div>` : ""}
+    <label>Nosaukums<input id="pName" value="${esc(r.name)}" placeholder="piem. Vārīti rīsi"></label>
+    <div class="seg2" id="pMode">
+      <button type="button" data-m="k">Zinu vērtību</button>
+      <button type="button" data-m="w">Aprēķināt no svara</button>
+    </div>
+    <div id="pK"><label>OH uz 100 g, kā ēd (gatavā veidā)<input id="pOh" inputmode="decimal" value="${esc(fmt(r.oh100,1))}" placeholder="piem. 28"></label></div>
+    <div id="pW" class="grid">
+      <label class="full">OH uz 100 g sausā veidā (no iepakojuma)<input id="pDryOh" inputmode="decimal" value="${esc(fmt(it.oh100,1))}" placeholder="piem. 78"></label>
+      <label>Sausais svars, g<input id="pDry" inputmode="decimal" value="${esc(fmt(it.g,0))}" placeholder="piem. 200"></label>
+      <label>Gatavais svars, g<input id="pCooked" inputmode="decimal" value="${esc(fmt(r.cooked_g,0))}" placeholder="piem. 560"></label>
+      <p class="hint full">Nosver sauso produktu pirms vārīšanas un visu gatavo pēc vārīšanas, bez katla un nolieta ūdens.</p>
+    </div>
+    <div class="grid">
+      <label>Parastā porcija, g<input id="pPortion" inputmode="decimal" value="${esc(fmt(r.portion_g,0))}" placeholder="nav obligāti"></label>
+      <label>1 gabals sver, g<input id="pPiece" inputmode="decimal" value="${esc(fmt(r.piece_g,0))}" placeholder="nav obligāti"></label>
+      <label class="full">Piezīmes<textarea id="pNote" rows="2" placeholder="zīmols, vārīšanas ilgums…">${esc(r.note || "")}</textarea></label>
+    </div>
+    <label class="check"><input type="checkbox" id="pApprox" ${r.approx ? "checked" : ""}><span>Vērtība ir aptuvena (no tabulām, nav pārbaudīta ar iepakojumu vai svariem)</span></label>
+    <div class="calcbox" id="pSum"></div>
+    <div class="rowbtns">
+      ${isNew ? "" : `<button class="btn danger" id="pDel" type="button">Dzēst</button>`}
+      <button class="btn" id="pCancel" type="button">Atcelt</button>
+      <button class="btn primary" id="pSave" type="button">Saglabāt</button>
+    </div>
+  </div>`;
+  $("#sheetHost").innerHTML = ""; $("#sheetHost").appendChild(wrap);
+  const q = s => wrap.querySelector(s);
+  const formData = () => {
+    const base = { kind: "product", name: q("#pName").value.trim(), portion_g: num(q("#pPortion").value), piece_g: num(q("#pPiece").value), pieces: null, note: q("#pNote").value.trim(), approx: q("#pApprox").checked };
+    return mode === "w"
+      ? Object.assign(base, { oh100: null, cooked_g: num(q("#pCooked").value), items: [{ n: "sausā veidā", g: num(q("#pDry").value), oh100: num(q("#pDryOh").value) }] })
+      : Object.assign(base, { oh100: num(q("#pOh").value), cooked_g: null, items: [] });
+  };
+  const sum = () => {
+    const d = formData(), p = prodPer100(d);
+    q("#pSum").innerHTML = `<div class="calc"><b>${p != null ? fmt(p,1) + " g" : "—"}</b><span>OH uz 100 g, kā ēd</span></div>
+      <div class="calc"><b>${p > 0 ? fmt(gPerMv / p * 100,0) + " g" : "—"}</b><span>= 1 MV</span></div>
+      ${p != null && d.portion_g ? `<div class="calc"><b>${fmt(p * d.portion_g / 100 / gPerMv,1)} MV</b><span>porcija ${fmt(d.portion_g,0)} g</span></div>` : ""}
+      ${p != null && d.piece_g ? `<div class="calc"><b>${fmt(p * d.piece_g / 100 / gPerMv,1)} MV</b><span>1 gab. ≈ ${fmt(d.piece_g,0)} g</span></div>` : ""}`;
+  };
+  const setMode = m => {
+    mode = m; q("#pK").hidden = m !== "k"; q("#pW").hidden = m !== "w";
+    wrap.querySelectorAll("#pMode button").forEach(x => x.setAttribute("aria-pressed", x.dataset.m === m));
+    sum();
+  };
+  wrap.querySelectorAll("#pMode button").forEach(b => b.onclick = () => { if (b.dataset.m === "w") q("#pApprox").checked = false; setMode(b.dataset.m); });
+  ["#pOh","#pDryOh","#pDry","#pCooked","#pPortion","#pPiece"].forEach(s => q(s).oninput = sum);
+  setMode(mode);
+
+  if (child.ai) {
+    const ask = q("#pAsk"), btn = q("#pPhoto");
+    btn.onclick = () => q("#pFile").click();
+    q("#pFile").onchange = async ev => {
+      const f = ev.target.files && ev.target.files[0]; ev.target.value = ""; if (!f) return;
+      btn.disabled = true; btn.textContent = "Lasa iepakojumu…"; ask.hidden = true;
+      try {
+        const image = await shrink(f, 2000); if (!image) throw new Error("Attēlu neizdevās atvērt");
+        const res = await callParse({ mode: "label", image, mediaType: "image/jpeg" });
+        const v = num(res.oh100);
+        if (v == null || v < 0 || v > 100) throw new Error(res.error || "Ogļhidrātus neizdevās nolasīt");
+        if (res.name && !q("#pName").value.trim()) q("#pName").value = String(res.name).slice(0, 120);
+        const basis = res.basis === "100 ml" ? "100 ml" : "100 g";
+        const read = `Nolasīts: <b>${fmt(v,1)} g ogļhidrātu uz ${basis}</b>. Salīdzini ar iepakojumu.${res.note ? " " + esc(res.note) : ""}`;
+        const fill = toDry => {
+          if (toDry) { setMode("w"); q("#pDryOh").value = fmt(v,1); q("#pOh").value = ""; }
+          else { setMode("k"); q("#pOh").value = fmt(v,1); }
+          q("#pApprox").checked = false; sum();
+          ask.innerHTML = `<p>${read}</p><p>${toDry ? "Ierakstīts kā vērtība sausam produktam. Tagad ieraksti sauso un gatavo svaru." : "Ierakstīts kā vērtība produktam, kādu ēd."}</p>`;
+        };
+        ask.hidden = false;
+        if (mode === "w") fill(true);
+        else if (res.prepared === true) fill(false);
+        else {
+          // The label never says whether the food is eaten as is or cooked first, and guessing wrong would triple the carbs, so the user chooses
+          ask.innerHTML = `<p>${read}</p><p>Kā šo produktu ēd?</p><div class="rowbtns"><button class="btn" type="button" data-d="0">Tādu, kāds ir (maize, jogurts, cepumi)</button><button class="btn" type="button" data-d="1">Vārītu (rīsi, griķi, makaroni)</button></div>`;
+          ask.querySelectorAll("button").forEach(b => b.onclick = () => fill(b.dataset.d === "1"));
+        }
+      } catch (e) { toast(e.message || "Neizdevās"); }
+      finally { btn.disabled = false; btn.innerHTML = CAM_SVG + " Fotografēt iepakojumu"; }
+    };
+  }
+
+  q("#pCancel").onclick = () => { if (isNew) closeSheet(); else openProduct(r); };
+  q("#pSave").onclick = async () => {
+    const d = formData();
+    if (!d.name) { toast("Ieraksti produkta nosaukumu"); return; }
+    if (mode === "k") {
+      if (d.oh100 == null || d.oh100 < 0 || d.oh100 > 100) { toast("Ieraksti OH uz 100 g (0–100)"); return; }
+    } else {
+      const i = d.items[0];
+      if (i.oh100 == null || i.oh100 < 0 || i.oh100 > 100) { toast("Ieraksti OH uz 100 g sausā veidā (0–100)"); return; }
+      if (!(i.g > 0) || !(d.cooked_g > 0)) { toast("Ieraksti sauso un gatavo svaru"); return; }
+      if (prodPer100(d) > 100) { toast("Pārbaudi svarus: sanāk vairāk nekā 100 g OH uz 100 g"); return; }
+    }
+    q("#pSave").disabled = true;
+    const res = isNew ? await sb.from("recipes").insert(Object.assign({ child_id: child.id }, d)).select().single()
+                      : await sb.from("recipes").update(d).eq("id", r.id).select().single();
+    if (res.error) { q("#pSave").disabled = false; toast("Neizdevās saglabāt: " + res.error.message); return; }
+    toast("Produkts saglabāts"); await loadRecipes(); openProduct(res.data);
+  };
+  if (!isNew) { let armed = false; q("#pDel").onclick = async () => {
+    if (!armed) { armed = true; q("#pDel").textContent = "Tiešām dzēst?"; return; }
+    const { error } = await sb.from("recipes").delete().eq("id", r.id);
+    if (error) { toast("Neizdevās izdzēst"); return; }
+    closeSheet(); toast("Produkts izdzēsts"); loadRecipes(); }; }
+  if (isNew) setTimeout(() => q("#pName").focus(), 50);
+}
 
 function openRecipe(r){
   const t = recTotals(r);
